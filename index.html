@@ -95,6 +95,16 @@
   .yt-wrap.landscape{aspect-ratio:7/5;width:100%;}
   .yt-wrap.portrait916{aspect-ratio:9/16;max-height:72vh;width:calc(72vh * 9 / 16);}
 
+  /* Лайтбокс */
+  .lb-trigger{cursor:zoom-in;}
+  .lb-trigger img{transition:opacity 0.2s;}
+  .lb-trigger:hover img{opacity:0.85;}
+  #lightbox{display:none;position:fixed;inset:0;z-index:999;background:rgba(10,13,22,0.95);align-items:center;justify-content:center;padding:20px;}
+  #lightbox.open{display:flex;}
+  #lightbox img{max-width:90vw;max-height:90vh;object-fit:contain;border-radius:4px;}
+  #lightbox-close{position:absolute;top:20px;right:28px;font-size:2rem;color:var(--gold);cursor:pointer;line-height:1;opacity:0.8;}
+  #lightbox-close:hover{opacity:1;}
+
   /* Sound btn */
   .sound-btn{position:absolute;bottom:10px;right:10px;z-index:10;width:32px;height:32px;border-radius:50%;background:rgba(22,27,39,0.75);backdrop-filter:blur(6px);border:1px solid rgba(201,169,110,0.4);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.2s;color:var(--gold);font-size:14px;line-height:1;user-select:none;}
   .sound-btn:hover{background:rgba(201,169,110,0.2);}
@@ -291,6 +301,11 @@
   <a href="#contacts" onclick="closeMenu()">Contact</a>
 </div>
 
+<div id="lightbox" onclick="closeLightbox()">
+  <span id="lightbox-close">✕</span>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
 <section id="hero">
   <video class="hero-video" src="hero-bg.mp4" autoplay muted loop playsinline></video>
   <div class="hero-overlay"></div>
@@ -326,9 +341,9 @@
     </div>
     <div>
       <div class="before-after">
-        <div class="ba-img"><img src="case01-original.jpg" alt="Original"><span class="ba-label">Original Photo</span></div>
+        <div class="ba-img lb-trigger" onclick="openLightbox(this)"><img src="case01-original.jpg" alt="Original"><span class="ba-label">Original Photo</span></div>
         <div class="ba-arrow">→</div>
-        <div class="ba-img"><img src="case01-result.jpg" alt="Result"><span class="ba-label">AI Generated</span></div>
+        <div class="ba-img lb-trigger" onclick="openLightbox(this)"><img src="case01-result.jpg" alt="Result"><span class="ba-label">AI Generated</span></div>
       </div>
     </div>
   </div>
@@ -371,15 +386,15 @@
 
   <!-- Строка 2: 3 вертикальных фото + 4-я колонка (исходники) — поджаты, с воздухом -->
   <div class="case02-row2" style="display:grid;grid-template-columns:1fr 1fr 1fr 0.55fr;gap:20px;align-items:stretch;max-width:90%;margin:0 auto 40px;">
-    <div class="media-thumb p34"><img src="case02-chef1.jpg" alt="Повар 1"></div>
-    <div class="media-thumb p34"><img src="case02-chef2.jpg" alt="Повар 2"></div>
-    <div class="media-thumb p34"><img src="case02-chef-dish.jpg" alt="Повар с блюдом"></div>
-    <div style="display:flex;flex-direction:column;gap:12px;opacity:0.45;">
-      <div class="media-thumb" style="flex:1;min-height:0;">
+    <div class="media-thumb p34 lb-trigger" onclick="openLightbox(this)"><img src="case02-chef1.jpg" alt="Повар 1"></div>
+    <div class="media-thumb p34 lb-trigger" onclick="openLightbox(this)"><img src="case02-chef2.jpg" alt="Повар 2"></div>
+    <div class="media-thumb p34 lb-trigger" onclick="openLightbox(this)"><img src="case02-chef-dish.jpg" alt="Повар с блюдом"></div>
+    <div class="source-thumbs" style="display:flex;flex-direction:column;gap:12px;">
+      <div class="media-thumb lb-trigger" style="flex:1;min-height:0;" onclick="openLightbox(this)">
         <img src="case02-interior.jpg" alt="Interior" style="width:100%;height:100%;object-fit:cover;display:block;">
         <span class="photo-label">Client's Photo</span>
       </div>
-      <div class="media-thumb" style="flex:1;min-height:0;background:var(--bg-card2);">
+      <div class="media-thumb lb-trigger" style="flex:1;min-height:0;background:var(--bg-card2);" onclick="openLightbox(this)">
         <img src="case02-dish1.png" alt="Dish" style="width:100%;height:100%;object-fit:contain;display:block;">
         <span class="photo-label">Client's Photo</span>
       </div>
@@ -388,8 +403,8 @@
 
   <!-- Строка 3: 2 горизонтальных фото — поджаты, с воздухом -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:60%;margin:0 auto;">
-    <div class="media-thumb p43"><img src="case02-clients.jpg" alt="Клиенты"></div>
-    <div class="media-thumb p43"><img src="case02-dish-result.jpg" alt="Роллы"></div>
+    <div class="media-thumb p43 lb-trigger" onclick="openLightbox(this)"><img src="case02-clients.jpg" alt="Клиенты"></div>
+    <div class="media-thumb p43 lb-trigger" onclick="openLightbox(this)"><img src="case02-dish-result.jpg" alt="Роллы"></div>
   </div>
 
 </section>
@@ -624,6 +639,19 @@
     v.muted=!v.muted;
     btn.textContent=v.muted?'🔇':'🔊';
   }
+
+  function openLightbox(el){
+    const img = el.querySelector('img');
+    if(!img) return;
+    document.getElementById('lightbox-img').src = img.src;
+    document.getElementById('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox(){
+    document.getElementById('lightbox').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeLightbox(); });
 
   function setLang(lang){
     // Обновляем кнопки
