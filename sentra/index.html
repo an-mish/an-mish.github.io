@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentra Concierge — Персональный консьерж-сервис</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:    #1e1c18;
+  --bg2:   #252219;
+  --bg3:   #2c2820;
+  --card:  #1a1815;
+  --warm:  #2e2820;
+  --gold:  #b8843a;
+  --gold2: #d4a45c;
+  --text:  #ede5d8;
+  --text2: #b8ae9e;
+  --ink2:  #c0b5a5;
+  --line:  rgba(184,132,58,0.2);
+}
+
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', sans-serif; font-weight: 400; background: var(--bg); color: var(--text); overflow-x: hidden; line-height: 1.6; }
+
+/* ── SHARED ── */
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 48px; }
+.sec-tag { font-size: 0.68rem; letter-spacing: 0.42em; text-transform: uppercase; color: var(--gold); display: block; margin-bottom: 14px; font-weight: 500; }
+.sec-h2 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: clamp(1.9rem, 3.5vw, 2.8rem); line-height: 1.1; letter-spacing: -0.01em; color: var(--text); }
+.gold-bar { width: 40px; height: 2px; background: var(--gold); margin-top: 20px; opacity: 0.8; }
+
+.btn-gold {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 28px; background: var(--gold); color: #1a1714;
+  font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  text-decoration: none; border: none; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: background 0.3s; white-space: nowrap;
+}
+.btn-gold:hover { background: var(--gold2); }
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 28px; border: 1px solid rgba(237,229,216,0.28); color: var(--text);
+  font-size: 0.78rem; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase;
+  text-decoration: none; cursor: pointer; background: none; font-family: 'Inter', sans-serif;
+  transition: all 0.3s; white-space: nowrap;
+}
+.btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ── FLOAT TG ── */
+.float-tg {
+  position: fixed; bottom: 28px; right: 28px; z-index: 500;
+  width: 52px; height: 52px; border-radius: 50%; background: var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5); text-decoration: none;
+  transition: transform 0.3s, background 0.3s;
+}
+.float-tg:hover { transform: scale(1.1); background: var(--gold2); }
+.float-tg svg { width: 22px; fill: #1a1714; }
+
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 400; height: 64px;
+  background: rgba(28,26,22,0.97); border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(10px); display: flex; align-items: center;
+}
+.nav-inner {
+  width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 48px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.1rem; color: var(--text); text-decoration: none; letter-spacing: 0.04em; }
+.nav-logo em { font-style: italic; color: var(--gold2); }
+.nav-menu { display: flex; gap: 26px; align-items: center; list-style: none; }
+.nav-menu a { font-size: 0.74rem; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text2); text-decoration: none; transition: color 0.3s; }
+.nav-menu a:hover { color: var(--text); }
+.nav-menu .nav-cta { padding: 8px 20px; border: 1px solid var(--line); color: var(--gold); transition: all 0.3s; }
+.nav-menu .nav-cta:hover { background: var(--gold); color: #1a1714; }
+.hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 8px; background: none; border: none; }
+.hamburger span { display: block; width: 22px; height: 1.5px; background: var(--text); }
+
+/* ── HERO ── */
+.hero {
+  min-height: 100vh; padding-top: 64px;
+  background: #1e1b16; position: relative; overflow: hidden;
+  display: flex; align-items: center;
+}
+.hero::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 70% 90% at 15% 50%, #2a2418 0%, #1a1714 55%, #111009 100%);
+}
+.hero-wrap {
+  width: 100%; max-width: 1100px; margin: 0 auto; padding: 40px 48px;
+  display: grid; grid-template-columns: 1fr 1fr;
+  align-items: center; gap: 40px;
+  position: relative; z-index: 2;
+}
+.hero-content {}
+.hero-tag { font-size: 0.67rem; letter-spacing: 0.42em; text-transform: uppercase; color: var(--gold); margin-bottom: 26px; display: block; font-weight: 500; }
+.hero-h1 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: clamp(2.4rem, 4.2vw, 3.8rem); line-height: 1.08; color: var(--text); letter-spacing: -0.015em; margin-bottom: 22px; }
+.hero-h1 em { font-style: italic; color: var(--gold2); display: block; }
+.hero-p { font-size: 0.98rem; line-height: 1.85; color: var(--text2); margin-bottom: 40px; font-weight: 300; }
+.hero-p strong { color: var(--text); font-weight: 500; }
+.hero-btns { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.hero-btns .btn-gold,
+.hero-btns .btn-ghost { width: 100%; max-width: 300px; justify-content: center; }
+
+.hero-visual {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  padding: 40px 20px;
+}
+.hero-visual img {
+  width: 85%; max-width: 400px; height: auto; display: block;
+  position: relative; z-index: 1;
+  filter: drop-shadow(0 20px 50px rgba(0,0,0,0.8));
+}
+.hero-visual::after {
+  content: ''; position: absolute; top: 0; left: 0; width: 35%; height: 100%;
+  background: linear-gradient(to right, #1a1714 0%, transparent 100%);
+  z-index: 2; pointer-events: none;
+}
+.hero-visual::before {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 20%;
+  background: linear-gradient(to top, #1e1b16 0%, transparent 100%);
+  z-index: 2; pointer-events: none;
+}
+
+/* ── ABOUT ── */
+.about { background: var(--warm); padding: 100px 0; }
+.about-inner { max-width: 720px; }
+.about-inner .sec-h2 { margin-bottom: 8px; }
+.about-inner .gold-bar { margin-bottom: 30px; }
+.about-inner p { font-size: 1.05rem; line-height: 1.9; color: var(--ink2); margin-bottom: 16px; }
+.about-bullets { list-style: none; display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
+.about-bullets li { display: flex; align-items: center; gap: 16px; font-size: 1rem; color: var(--text); font-weight: 400; }
+.b-icon { width: 36px; height: 36px; border-radius: 50%; background: rgba(184,132,58,0.14); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.b-icon svg { width: 16px; stroke: var(--gold); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── SERVICES ── */
+.services { background: var(--bg2); padding: 100px 0; }
+.svc-top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 52px; gap: 32px; flex-wrap: wrap; }
+.svc-top .sec-h2 { color: var(--text); }
+.svc-top-r { font-size: 0.97rem; color: var(--text2); line-height: 1.8; max-width: 320px; font-weight: 300; }
+
+.acc { border-top: 1px solid var(--line); }
+.acc-item { border-bottom: 1px solid var(--line); }
+.acc-head {
+  width: 100%; background: none; border: none; cursor: pointer;
+  padding: 26px 0; display: flex; align-items: center; gap: 22px;
+  text-align: left; transition: color 0.3s;
+}
+.acc-head:hover .acc-title { color: var(--gold2); }
+.acc-num { font-family: 'Playfair Display', serif; font-style: italic; font-size: 1.4rem; color: var(--gold); opacity: 0.45; min-width: 32px; line-height: 1; }
+.acc-title { font-family: 'Playfair Display', serif; font-weight: 600; font-size: 1.15rem; color: var(--text); flex: 1; line-height: 1.3; transition: color 0.3s; }
+.acc-arrow { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.3s; }
+.acc-arrow svg { width: 12px; stroke: var(--gold); fill: none; stroke-width: 2; stroke-linecap: round; transition: transform 0.4s; }
+.acc-item.open .acc-arrow { background: rgba(184,132,58,0.14); }
+.acc-item.open .acc-arrow svg { transform: rotate(180deg); }
+.acc-body { max-height: 0; overflow: hidden; transition: max-height 0.45s ease; }
+.acc-item.open .acc-body { max-height: 500px; }
+.acc-inner { padding: 4px 0 30px 54px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 40px; list-style: none; }
+.acc-inner li { font-size: 0.97rem; color: var(--text2); line-height: 1.65; font-weight: 300; padding-left: 14px; position: relative; }
+.acc-inner li::before { content: ''; position: absolute; left: 0; top: 9px; width: 5px; height: 1.5px; background: var(--gold); }
+
+/* ── CONTACT ── */
+.contact { background: var(--bg3); padding: 100px 0; }
+.contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.contact-left .sec-h2 { margin-bottom: 10px; }
+.contact-left .gold-bar { margin-bottom: 28px; }
+.contact-left > p { font-size: 1rem; color: var(--text2); line-height: 1.85; margin-bottom: 32px; font-weight: 300; }
+.c-links { display: flex; flex-direction: column; gap: 14px; margin-bottom: 32px; }
+.c-link { display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--text2); font-size: 0.97rem; font-weight: 300; transition: color 0.3s; }
+.c-link:hover { color: var(--gold2); }
+.c-link svg { width: 18px; flex-shrink: 0; opacity: 0.5; }
+
+.contact-form { background: var(--card); padding: 40px 36px; border: 1px solid var(--line); }
+.form-title { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.3rem; color: var(--text); margin-bottom: 28px; }
+.field { margin-bottom: 18px; }
+.field label { display: block; font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text2); margin-bottom: 8px; font-weight: 500; }
+.field input, .field textarea {
+  width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--line);
+  padding: 13px 16px; color: var(--text); font-family: 'Inter', sans-serif;
+  font-size: 0.97rem; font-weight: 300; outline: none; resize: none;
+  transition: border-color 0.3s;
+}
+.field input:focus, .field textarea:focus { border-color: var(--gold); }
+.field input::placeholder, .field textarea::placeholder { color: rgba(184,174,158,0.35); }
+.field textarea { height: 100px; }
+.form-note { font-size: 0.75rem; color: var(--text2); opacity: 0.55; margin-bottom: 10px; }
+.form-submit { /* natural width */ }
+
+/* ── FOOTER ── */
+footer { background: #111009; padding: 26px 0; border-top: 1px solid var(--line); }
+.footer-inner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
+.footer-logo { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.95rem; color: rgba(237,229,216,0.28); text-decoration: none; }
+.footer-logo em { font-style: italic; color: rgba(184,132,58,0.38); }
+.footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
+.footer-links a { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(237,229,216,0.2); text-decoration: none; transition: color 0.3s; }
+.footer-links a:hover { color: rgba(237,229,216,0.45); }
+.footer-copy { font-size: 0.68rem; color: rgba(237,229,216,0.18); letter-spacing: 0.08em; }
+
+/* ── RESPONSIVE ── */
+@media(max-width: 960px) {
+  .wrap, .nav-inner { padding: 0 24px; }
+  .nav-menu { display: none; }
+  .hamburger { display: flex; }
+  .hero-wrap { grid-template-columns: 1fr; padding: 40px 24px; }
+  .hero-visual { display: none; }
+  .about, .services, .contact { padding: 72px 0; }
+  .contact-grid { grid-template-columns: 1fr; gap: 40px; }
+  footer { padding: 22px 0; }
+}
+@media(max-width: 600px) {
+  .hero-h1 { font-size: clamp(2rem, 7vw, 2.8rem); }
+  .hero-btns .btn-gold, .hero-btns .btn-ghost { max-width: 100%; }
+  .svc-top { flex-direction: column; }
+  .acc-inner { grid-template-columns: 1fr; padding-left: 32px; }
+  .acc-inner li { font-size: 1rem; }
+  .float-tg { bottom: 20px; right: 20px; }
+  .footer-inner { flex-direction: column; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+
+<!-- FLOAT TG -->
+<a href="https://t.me/sentraconcierge" class="float-tg" target="_blank" aria-label="Telegram">
+  <svg viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.17 13.879l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.978.68z"/></svg>
+</a>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">Sentra <em>Concierge</em></a>
+    <ul class="nav-menu">
+      <li><a href="#about">О нас</a></li>
+      <li><a href="#services">Услуги</a></li>
+      <li><a href="#contact" class="nav-cta">Оставить заявку</a></li>
+    </ul>
+    <button class="hamburger" id="burger" aria-label="Меню"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="home">
+  <div class="hero-wrap">
+    <div class="hero-content">
+      <span class="hero-tag">Персональный консьерж-сервис</span>
+      <h1 class="hero-h1">
+        Ваше время —<br>для главного.
+        <em>Остальное делегируйте нам.</em>
+      </h1>
+      <p class="hero-p"><strong>Sentra</strong> — консьерж-сервис и персональные ассистенты для собственников бизнеса и руководителей высшего звена.</p>
+      <div class="hero-btns">
+        <a href="#contact" class="btn-gold">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Оставить заявку
+        </a>
+        <a href="https://t.me/sentraconcierge" class="btn-ghost" target="_blank">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.17 13.879l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.978.68z"/></svg>
+          Связаться в Telegram
+        </a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <img src="hero-collage.jpg" alt="">
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section class="about" id="about">
+  <div class="wrap">
+    <div class="about-inner">
+      <span class="sec-tag">О сервисе</span>
+      <h2 class="sec-h2">Сервис, который понимает<br>ценность вашего времени</h2>
+      <div class="gold-bar"></div>
+      <p style="margin-top:28px;">Мы знаем, что день предпринимателя расписан по минутам. Sentra создан для того, чтобы снять с вас груз повседневных забот, логистических сложностей и организационной рутины.</p>
+      <p>Мы берём на себя всё, что можно делегировать — от повседневных мелочей до нестандартных задач. Обеспечиваем строгую конфиденциальность и решение вопросов любой сложности: от бронирования столика до релокации бизнеса.</p>
+      <ul class="about-bullets">
+        <li>
+          <div class="b-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          100% конфиденциальность
+        </li>
+        <li>
+          <div class="b-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+          Доступ к закрытым ресурсам
+        </li>
+        <li>
+          <div class="b-icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+          Решение нестандартных задач
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SERVICES -->
+<section class="services" id="services">
+  <div class="wrap">
+    <div class="svc-top">
+      <div>
+        <span class="sec-tag">Услуги</span>
+        <h2 class="sec-h2">Что мы берём на себя</h2>
+      </div>
+      <p class="svc-top-r">Всё, что вы хотите делегировать —<br>от мелких поручений до организации<br>переезда в другую страну.</p>
+    </div>
+    <div class="acc">
+
+      <div class="acc-item open">
+        <button class="acc-head">
+          <span class="acc-num">01</span>
+          <span class="acc-title">Путешествия под ключ</span>
+          <div class="acc-arrow"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+        </button>
+        <div class="acc-body">
+          <ul class="acc-inner">
+            <li>Билеты, Fast Track, VIP-залы, сопровождение в аэропортах</li>
+            <li>Бизнес-авиация: частные самолёты, вертолёты</li>
+            <li>Подбор жилья — от вилл до эксклюзивных объектов, помощь с персоналом</li>
+            <li>Провоз животных, оборудования и багажа</li>
+            <li>Дизайн путешествий: индивидуальные маршруты под вас</li>
+            <li>Туристическое страхование</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="acc-item">
+        <button class="acc-head">
+          <span class="acc-num">02</span>
+          <span class="acc-title">Отдых, досуг и забота о себе</span>
+          <div class="acc-arrow"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+        </button>
+        <div class="acc-body">
+          <ul class="acc-inner">
+            <li>Бронирование ресторанов, СПА, бань, тренировок</li>
+            <li>Экскурсии, музеи, культурные маршруты, гиды и тематические туры</li>
+            <li>Организация покупок, доставка, поиск уникальных подарков</li>
+            <li>Антиквариат, цветы, элитный алкоголь</li>
+            <li>Помощь с приобретением товаров из-за границы</li>
+            <li>Медицинская помощь: врачи, скорая, клиники, чекапы</li>
+            <li>Помощь в выборе детских садов, школ, гувернёров и репетиторов</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="acc-item">
+        <button class="acc-head">
+          <span class="acc-num">03</span>
+          <span class="acc-title">Транспорт и логистика</span>
+          <div class="acc-arrow"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+        </button>
+        <div class="acc-body">
+          <ul class="acc-inner">
+            <li>Организация трансферов, такси, аренда автомобилей (с водителем и без)</li>
+            <li>Услуги «трезвого водителя»</li>
+            <li>Подбор водителей и шофёров в любом городе</li>
+            <li>ТО, шиномонтаж, покупка запчастей, хранение резины</li>
+            <li>Эвакуаторы, страхование ОСАГО/КАСКО, административные вопросы</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="acc-item">
+        <button class="acc-head">
+          <span class="acc-num">04</span>
+          <span class="acc-title">Поддержка бизнеса и личных дел</span>
+          <div class="acc-arrow"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+        </button>
+        <div class="acc-body">
+          <ul class="acc-inner">
+            <li>Поддержка бизнес-ассистента</li>
+            <li>ВНЖ, гражданство, релокация, инвестиционные паспорта</li>
+            <li>Переводы, оформление справок, апостиль</li>
+            <li>Поиск подрядчиков, аналитика, составление подборок</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="acc-item">
+        <button class="acc-head">
+          <span class="acc-num">05</span>
+          <span class="acc-title">Организация мероприятий</span>
+          <div class="acc-arrow"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+        </button>
+        <div class="acc-body">
+          <ul class="acc-inner">
+            <li>Частные праздники и вечеринки, дни рождения, семейные торжества</li>
+            <li>Подбор подрядчиков и курирование всех этапов</li>
+            <li>Поддержка в переговорах, подготовка подарков</li>
+            <li>Аренда залов и площадок</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section class="contact" id="contact">
+  <div class="wrap">
+    <div class="contact-grid">
+
+      <div class="contact-left">
+        <span class="sec-tag">Контакты</span>
+        <h2 class="sec-h2">Готовы передать рутину профессионалам?</h2>
+        <div class="gold-bar"></div>
+        <p>Напишите нам, чтобы обсудить ваши задачи. Мы свяжемся с вами в кратчайшие сроки.</p>
+        <div class="c-links">
+          <a href="https://t.me/sentraconcierge" class="c-link" target="_blank">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.17 13.879l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.978.68z"/></svg>
+            Telegram: @sentraconcierge
+          </a>
+          <a href="tel:+79035997764" class="c-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.31 2 2 0 0 1 3.62 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.29 6.29l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            +7 (903) 599-77-64
+          </a>
+          <a href="/cdn-cgi/l/email-protection#9fecfaf1ebedfefcf0f1fcf6faedf8fadff2fef6f3b1edea" class="c-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>
+            <span class="__cf_email__" data-cfemail="2f5c4a415b5d4e4c40414c464a5d484a6f424e4643015d5a">[email&#160;protected]</span>
+          </a>
+          <span class="c-link" style="cursor:default; pointer-events:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            Работаем по всему миру
+          </span>
+        </div>
+        <a href="https://t.me/sentraconcierge" class="btn-gold" target="_blank">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.17 13.879l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.978.68z"/></svg>
+          Написать в Telegram
+        </a>
+      </div>
+
+      <div class="contact-form" id="form">
+        <p class="form-title">Оставить заявку</p>
+        <form id="contactForm">
+          <div class="field">
+            <label for="fname">Ваше имя</label>
+            <input type="text" id="fname" name="name" placeholder="Как к вам обращаться?" required>
+          </div>
+          <div class="field">
+            <label for="fcontact">Телефон или Telegram</label>
+            <input type="text" id="fcontact" name="contact" placeholder="+7 (___) ___-__-__ или @username" required>
+          </div>
+          <div class="field">
+            <label for="ftask">Кратко о задаче <span style="opacity:0.45; font-size:0.85em;">(необязательно)</span></label>
+            <textarea id="ftask" name="task" placeholder="Опишите запрос в свободной форме..."></textarea>
+          </div>
+          <p class="form-note">Ответим в течение нескольких часов</p>
+          <button type="submit" class="btn-gold form-submit">Обсудить задачу</button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="footer-inner">
+      <a href="#" class="footer-logo">Sentra <em>Concierge</em></a>
+      <div class="footer-links">
+        <a href="#about">О нас</a>
+        <a href="#services">Услуги</a>
+        <a href="#contact">Контакты</a>
+      </div>
+      <p class="footer-copy">© 2026 · Создатель: Анна Мищихина</p>
+    </div>
+  </div>
+</footer>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// Accordion
+document.querySelectorAll('.acc-head').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var item = btn.closest('.acc-item');
+    var isOpen = item.classList.contains('open');
+    document.querySelectorAll('.acc-item').forEach(function(i) { i.classList.remove('open'); });
+    if (!isOpen) item.classList.add('open');
+  });
+});
+
+// Form → mailto
+document.getElementById('contactForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var name    = document.getElementById('fname').value;
+  var contact = document.getElementById('fcontact').value;
+  var task    = document.getElementById('ftask').value;
+  var subject = encodeURIComponent('Заявка с сайта Sentra Concierge');
+  var body    = encodeURIComponent('Имя: ' + name + '\nКонтакт: ' + contact + '\nЗадача: ' + task);
+  window.location.href = 'mailto:sentraconcierge@mail.ru?subject=' + subject + '&body=' + body;
+});
+
+// Smooth scroll
+document.querySelectorAll('a[h
