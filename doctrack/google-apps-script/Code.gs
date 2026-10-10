@@ -1,6 +1,7 @@
 /**
  * Backend for doctrack (https://an-mish.github.io/doctrack/).
- * Stores documents in this Google Sheet and sends daily renewal reminders.
+ * Stores documents in this Google Sheet, mirrors them to a Google Calendar
+ * and sends daily renewal reminders.
  * Setup instructions: doctrack/README.md
  */
 
@@ -12,8 +13,10 @@ const HEADERS = ['id', 'Тип', 'Название', 'Дата выдачи', '�
 const FIELDS = ['id', 'type', 'name', 'issued', 'expires', 'leadValue', 'leadUnit', 'note'];
 const UNITS = { d: 'дней', w: 'недель', m: 'месяцев' };
 const DAY = 86400000;
+const CALENDAR_NAME = 'Сроки документов';
 
-// Run once from the editor: creates the sheet, the access key and the daily reminder trigger.
+// Run once from the editor (and again after updating this code): creates the sheet, the access key,
+// the calendar and the daily reminder trigger.
 function setup() {
   const props = PropertiesService.getScriptProperties();
   if (!SHEET_ID) props.setProperty('SHEET_ID', SpreadsheetApp.getActiveSpreadsheet().getId());
@@ -27,6 +30,7 @@ function setup() {
     .filter(t => t.getHandlerFunction() === 'dailyCheck')
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('dailyCheck').timeBased().everyDays(1).atHour(9).create();
+  syncCalendar_(readDocs_());
   Logger.log('Готово. Ключ доступа для приложения:\n' + key);
 }
 
@@ -61,8 +65,11 @@ function doPost(e) {
     } else if (req.action !== 'list') {
       return json_({ ok: false, error: 'unknown_action' });
     }
-    if (req.action !== 'list') writeDocs_(docs);
-    return json_({ ok: true, docs: req.action === 'list' ? docs : readDocs_() });
+    if (req.action === 'list') return json_({ ok: true, docs });
+    writeDocs_(docs);
+    docs = readDocs_();
+    try { syncCalendar_(docs); } catch (err) { console.error('Calendar sync failed', err); }
+    return json_({ ok: true, docs });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err) });
   } finally {
@@ -173,6 +180,8 @@ function unitCode_(v) {
 function dailyCheck(force) {
   force = force === true; // a time trigger passes an event object
   const sh = sheet_();
+  // Picks up rows edited by hand in the sheet.
+  try { syncCalendar_(readDocs_()); } catch (err) { console.error('Calendar sync failed', err); }
   const tz = sh.getParent().getSpreadsheetTimeZone();
   const todayISO = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
   const today = utcDay_(todayISO);
@@ -252,4 +261,67 @@ function days_(n) {
   const a = Math.abs(n) % 100, b = a % 10;
   const w = a > 10 && a < 20 ? 'дней' : b === 1 ? 'день' : b > 1 && b < 5 ? 'дня' : 'дней';
   return `${n} ${w}`;
+}
+
+// ---------- calendar ----------
+
+// A separate calendar keeps these events apart from personal ones; it can be hidden or recoloured in Google Calendar.
+function calendar_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('CALENDAR_ID');
+  let cal = id && CalendarApp.getCalendarById(id);
+  if (!cal) {
+    cal = CalendarApp.createCalendar(CALENDAR_NAME, { color: CalendarApp.Color.BLUE });
+    props.setProperty('CALENDAR_ID', cal.getId());
+  }
+  return cal;
+}
+
+// Two all-day events per document — renewal start and expiry — each with a reminder at 9:00 the day before.
+// Events are tagged with the document id, so only changed ones are touched.
+function syncCalendar_(docs) {
+  const cal = calendar_();
+  const tz = Session.getScriptTimeZone();
+  const wanted = {};
+  docs.forEach(d => {
+    const exp = utcDay_(d.expires);
+    const start = subtractLead_(exp, d.leadValue, d.leadUnit);
+    const note = d.note ? `\n\n${d.note}` : '';
+    const app = '\n\nhttps://an-mish.github.io/doctrack/';
+    if (start < exp) {
+      wanted[`${d.id}|start`] = {
+        date: isoFromUtc_(start), title: `🟠 Начать обновление: ${d.name}`,
+        desc: `${d.type}. Действует до ${fmt_(exp)}.${note}${app}`,
+      };
+    }
+    wanted[`${d.id}|expire`] = {
+      date: d.expires, title: `🔴 Истекает: ${d.name}`,
+      desc: `${d.type}. Последний день действия документа.${note}${app}`,
+    };
+  });
+
+  cal.getEvents(new Date(2000, 0, 1), new Date(2100, 0, 1)).forEach(ev => {
+    const key = `${ev.getTag('doctrackId')}|${ev.getTag('kind')}`;
+    const w = wanted[key];
+    if (!w) { ev.deleteEvent(); return; }
+    const date = Utilities.formatDate(ev.getAllDayStartDate(), tz, 'yyyy-MM-dd');
+    if (date !== w.date) { ev.deleteEvent(); return; } // recreated below on the new date
+    if (ev.getTitle() !== w.title) ev.setTitle(w.title);
+    if (ev.getDescription() !== w.desc) ev.setDescription(w.desc);
+    delete wanted[key];
+  });
+
+  Object.keys(wanted).forEach(key => {
+    const w = wanted[key];
+    const [id, kind] = key.split('|');
+    const ev = cal.createAllDayEvent(w.title, Utilities.parseDate(w.date, tz, 'yyyy-MM-dd'), { description: w.desc });
+    ev.setTag('doctrackId', id);
+    ev.setTag('kind', kind);
+    ev.removeAllReminders();
+    ev.addPopupReminder(15 * 60); // all-day events start at midnight: 15 h before = 9:00 the day before
+  });
+}
+
+function isoFromUtc_(t) {
+  return new Date(t).toISOString().slice(0, 10);
 }
