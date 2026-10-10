@@ -14,6 +14,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
 *, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
 :root {
   --bg: #f6f5f2; --card: #ffffff; --text: #1d1e21; --muted: #6b6f76; --line: #e3e1dc;
   --accent: #2f5bea; --accent-ink: #fff;
@@ -51,9 +52,11 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .btn:disabled { opacity: .5; cursor: default; }
 .icon-btn { border: 0; background: none; padding: 8px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 1.25rem; line-height: 1; }
 
+.banner-actions { display: flex; align-items: center; gap: 2px; }
+.banner .btn { padding: 6px 12px; color: var(--accent); }
 .banner {
-  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
-  margin-bottom: 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 8px 14px;
+  margin-bottom: 14px; display: flex; gap: 8px; align-items: center; justify-content: space-between;
   font-size: .93rem;
 }
 .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
@@ -132,8 +135,11 @@ textarea { min-height: 70px; resize: vertical; }
   </header>
 
   <div class="banner" id="notifBanner" hidden>
-    <span>Включите уведомления, чтобы получать напоминания об обновлении.</span>
-    <button class="btn primary" id="notifBtn">Включить</button>
+    <span>🔔 Уведомления о сроках</span>
+    <span class="banner-actions">
+      <button class="btn" id="notifBtn">Включить</button>
+      <button class="icon-btn" id="notifClose" aria-label="Скрыть">✕</button>
+    </span>
   </div>
 
   <div class="summary" id="summary"></div>
@@ -206,7 +212,8 @@ textarea { min-height: 70px; resize: vertical; }
         <small>Напоминания придут из календаря телефона, даже если приложение закрыто</small></button>
       <button class="btn" id="driveBtn">☁️ Google Диск
         <small id="driveMenuHint">Хранить базу в Google Таблице и получать письма-напоминания</small></button>
-      <button class="btn" id="testBtn">🔔 Проверить уведомление</button>
+      <button class="btn" id="testBtn">🔔 Уведомления браузера
+        <small id="notifState"></small></button>
       <button class="btn" id="exportBtn">⬇️ Резервная копия (JSON)</button>
       <button class="btn" id="importBtn">⬆️ Восстановить из копии</button>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
@@ -478,19 +485,41 @@ async function checkAndNotify() {
   localStorage.setItem(NOTIFIED_KEY, JSON.stringify(sent));
 }
 
-function maybeShowNotifBanner() {
-  $('#notifBanner').hidden = !('Notification' in window) || Notification.permission !== 'default' || !docs.length;
-}
-$('#notifBtn').addEventListener('click', async () => {
-  const p = await Notification.requestPermission();
+// The banner asks once; after any answer or a ✕ it stays hidden. The menu item remains for later.
+const BANNER_KEY = 'doctrack.notifBannerDone.v1';
+const bannerDone = () => { try { return localStorage.getItem(BANNER_KEY) === '1'; } catch { return false; } };
+function hideBannerForGood() {
+  try { localStorage.setItem(BANNER_KEY, '1'); } catch {}
   maybeShowNotifBanner();
+}
+function maybeShowNotifBanner() {
+  const supported = 'Notification' in window;
+  const perm = supported ? Notification.permission : 'unsupported';
+  $('#notifBanner').hidden = perm !== 'default' || !docs.length || bannerDone();
+  $('#notifState').textContent = {
+    granted: 'Включены · нажмите, чтобы проверить',
+    denied: 'Запрещены в настройках браузера',
+    default: 'Выключены · нажмите, чтобы включить',
+    unsupported: 'Не поддерживаются этим браузером',
+  }[perm];
+}
+async function askPermission() {
+  hideBannerForGood();
+  const p = await Notification.requestPermission();
   if (p === 'granted') { registerPeriodicSync(); checkAndNotify(); toast('Уведомления включены'); }
-  else toast('Уведомления не разрешены — используйте календарь или Telegram');
-});
+  else if (p === 'denied') toast('Уведомления запрещены. Включить можно в настройках сайта в браузере');
+  else toast('Браузер не показал запрос — разрешите уведомления через значок в адресной строке');
+  return p;
+}
+$('#notifBtn').addEventListener('click', askPermission);
+$('#notifClose').addEventListener('click', hideBannerForGood);
+// Permission can also be changed from the browser's address bar or site settings.
+navigator.permissions?.query({ name: 'notifications' }).then(st => {
+  st.onchange = () => { maybeShowNotifBanner(); if (Notification.permission === 'granted') { registerPeriodicSync(); checkAndNotify(); } };
+}).catch(() => {});
 $('#testBtn').addEventListener('click', async () => {
   if (!('Notification' in window)) return toast('Браузер не поддерживает уведомления. На iPhone сначала добавьте приложение на экран «Домой».');
-  if (Notification.permission === 'default') await Notification.requestPermission();
-  maybeShowNotifBanner();
+  if (Notification.permission === 'default' && await askPermission() !== 'granted') return;
   if (!await showNotification('Сроки документов', 'Уведомления работают ✅', 'test')) toast('Уведомления запрещены в настройках браузера');
 });
 
@@ -612,7 +641,7 @@ render();
 maybeShowNotifBanner();
 checkAndNotify();
 pull();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); checkAndNotify(); pull(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); maybeShowNotifBanner(); checkAndNotify(); pull(); } });
 </script>
 </body>
 </html>
