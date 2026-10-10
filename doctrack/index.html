@@ -311,11 +311,16 @@ try { remote = JSON.parse(localStorage.getItem(REMOTE_KEY)); } catch {}
 
 async function api(action, payload = {}, conf = remote) {
   // text/plain keeps this a "simple" CORS request, which Apps Script web apps accept.
+  // Apps Script may take a few seconds to wake up; never leave the app waiting forever.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25000);
   const res = await fetch(conf.url, {
     method: 'POST',
+    signal: ctrl.signal,
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ key: conf.key, action, ...payload }),
-  });
+  }).catch(e => { throw new Error(e.name === 'AbortError' ? 'timeout' : 'network'); })
+    .finally(() => clearTimeout(timer));
   let data;
   try { data = await res.json(); } catch { throw new Error('bad_response'); }
   if (!data.ok) throw new Error(data.error || 'error');
@@ -341,13 +346,14 @@ function applyRemote(list) {
 
 async function pull() {
   if (!remote) return setSync('📱 Только на этом устройстве');
-  setSync('☁️ Синхронизация…');
+  setSync('☁️ Google Диск · проверяю изменения…');
   try { applyRemote(await api('list')); }
   catch (e) { setSync(syncError(e), true); }
 }
 
 function syncError(e) {
   if (e.message === 'bad_key') return '⚠️ Неверный ключ доступа Google Диска';
+  if (e.message === 'timeout') return '⚠️ Google Диск долго не отвечает · показана копия с устройства';
   return navigator.onLine ? '⚠️ Google Диск недоступен · показана копия с устройства' : '📴 Нет интернета · показана копия с устройства';
 }
 

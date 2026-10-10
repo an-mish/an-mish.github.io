@@ -1,4 +1,4 @@
-const SHELL = 'doctrack-shell-v5';
+const SHELL = 'doctrack-shell-v6';
 const DATA = 'doctrack-data';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
