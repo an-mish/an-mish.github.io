@@ -70,7 +70,7 @@ button, select, input, textarea { font: inherit; color: inherit; }
   background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
   box-shadow: var(--shadow); display: grid; gap: 8px; cursor: pointer; text-align: left; width: 100%;
 }
-.doc-top { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.doc-sub { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 2px; }
 .doc-name { font-weight: 600; font-size: 1.05rem; overflow-wrap: anywhere; }
 .doc-type { font-size: .82rem; color: var(--muted); }
 .pill { font-size: .78rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
@@ -381,9 +381,9 @@ function render() {
       if (total > 0) pct = Math.max(0, Math.min(100, (s.exp - today()) / total * 100));
     } else if (s.left < 0) pct = 0;
     return `<button class="doc" data-id="${d.id}">
-      <div class="doc-top">
-        <div><div class="doc-name">${esc(d.name)}</div><div class="doc-type">${esc(d.type)}</div></div>
-        <span class="pill ${s.level}">${s.label}</span>
+      <div>
+        <div class="doc-name">${esc(d.name)}</div>
+        <div class="doc-sub"><span class="doc-type">${esc(d.type)}</span><span class="pill ${s.level}">${s.label}</span></div>
       </div>
       <div class="bar"><i style="width:${pct}%;background:${color}"></i></div>
       <div class="doc-dates">
