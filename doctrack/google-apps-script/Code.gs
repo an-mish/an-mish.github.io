@@ -4,6 +4,9 @@
  * Setup instructions: doctrack/README.md
  */
 
+// Leave empty when the script is opened from the sheet (Extensions → Apps Script).
+// For a standalone script project, put the spreadsheet ID from its URL here.
+const SHEET_ID = '';
 const SHEET_NAME = 'Документы';
 const HEADERS = ['id', 'Тип', 'Название', 'Дата выдачи', 'Действует до', 'Начать обновление за', 'Единица', 'Заметка'];
 const FIELDS = ['id', 'type', 'name', 'issued', 'expires', 'leadValue', 'leadUnit', 'note'];
@@ -13,7 +16,7 @@ const DAY = 86400000;
 // Run once from the editor: creates the sheet, the access key and the daily reminder trigger.
 function setup() {
   const props = PropertiesService.getScriptProperties();
-  props.setProperty('SHEET_ID', SpreadsheetApp.getActiveSpreadsheet().getId());
+  if (!SHEET_ID) props.setProperty('SHEET_ID', SpreadsheetApp.getActiveSpreadsheet().getId());
   let key = props.getProperty('API_KEY');
   if (!key) {
     key = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
@@ -74,8 +77,9 @@ function json_(obj) {
 // ---------- sheet storage ----------
 
 function sheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet()
-    || SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('SHEET_ID'));
+  const ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID)
+    : SpreadsheetApp.getActiveSpreadsheet()
+      || SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('SHEET_ID'));
   let sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) sh = ss.insertSheet(SHEET_NAME, 0);
   if (sh.getLastRow() === 0) {
