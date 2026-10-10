@@ -103,16 +103,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 textarea { min-height: 70px; resize: vertical; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .lead { display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; }
+.hint a { color: var(--accent); }
 .hint { font-size: .82rem; color: var(--muted); margin: -6px 0 0; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .actions .spacer { flex: 1; }
 .menu { display: grid; gap: 8px; }
 .menu .btn { text-align: left; }
 .menu small { display: block; color: var(--muted); font-size: .8rem; }
-pre.code {
-  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: .78rem;
-  white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto; margin: 0;
-}
+.sync { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+.sync.err { color: var(--bad); }
 .toast {
   position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%);
   background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: .9rem;
@@ -125,7 +124,10 @@ pre.code {
 <body>
 <div class="wrap">
   <header>
-    <h1>Мои документы</h1>
+    <div>
+      <h1>Мои документы</h1>
+      <div class="sync" id="sync"></div>
+    </div>
     <button class="icon-btn" id="menuBtn" aria-label="Настройки и экспорт">⋯</button>
   </header>
 
@@ -202,29 +204,38 @@ pre.code {
     <div class="menu">
       <button class="btn" id="icsBtn">📅 Добавить в календарь (.ics)
         <small>Напоминания придут из календаря телефона, даже если приложение закрыто</small></button>
-      <button class="btn" id="tgBtn">✈️ Напоминания в Telegram
-        <small>Ежедневная проверка через GitHub Actions</small></button>
+      <button class="btn" id="driveBtn">☁️ Google Диск
+        <small id="driveMenuHint">Хранить базу в Google Таблице и получать письма-напоминания</small></button>
       <button class="btn" id="testBtn">🔔 Проверить уведомление</button>
       <button class="btn" id="exportBtn">⬇️ Резервная копия (JSON)</button>
       <button class="btn" id="importBtn">⬆️ Восстановить из копии</button>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
-    <p class="hint" style="margin:0">Данные хранятся только на этом устройстве, в браузере. Делайте резервную копию.</p>
+    <p class="hint" style="margin:0" id="storageHint"></p>
   </div>
 </dialog>
 
-<dialog id="tgDlg">
-  <div class="dlg">
+<dialog id="driveDlg">
+  <form class="dlg" id="driveForm">
     <div class="dlg-head">
-      <h2>Telegram-напоминания</h2>
+      <h2>Google Диск</h2>
       <button type="button" class="icon-btn" data-close aria-label="Закрыть">✕</button>
     </div>
-    <p class="hint" style="margin:0">Скопируйте строку ниже и вставьте её в секрет <b>DOCS_JSON</b> репозитория
-      (Settings → Secrets and variables → Actions). После каждого изменения списка документов обновите секрет.
-      Подробная инструкция — в файле <code>doctrack/README.md</code>.</p>
-    <pre class="code" id="tgJson"></pre>
-    <div class="actions"><button class="btn primary" id="tgCopy">Скопировать</button></div>
-  </div>
+    <p class="hint" style="margin:0">База хранится в Google Таблице на вашем Диске. Скрипт таблицы каждый день
+      проверяет сроки и присылает письмо. Как получить адрес и ключ — в
+      <a href="https://github.com/an-mish/an-mish.github.io/blob/main/doctrack/README.md" target="_blank" rel="noopener">инструкции</a>.</p>
+    <label>Адрес веб-приложения
+      <input name="url" type="url" required placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+    </label>
+    <label>Ключ доступа
+      <input name="key" required autocomplete="off" spellcheck="false">
+    </label>
+    <div class="actions">
+      <button type="button" class="btn danger" id="driveOff" hidden>Отключить</button>
+      <span class="spacer"></span>
+      <button type="submit" class="btn primary" id="driveOn">Подключить</button>
+    </div>
+  </form>
 </dialog>
 
 <div class="toast" id="toast"></div>
@@ -284,6 +295,61 @@ function save() {
   syncToServiceWorker();
 }
 
+// ---------- Google Drive (Apps Script backend bound to a Google Sheet) ----------
+const REMOTE_KEY = 'doctrack.remote.v1';
+let remote = null;
+try { remote = JSON.parse(localStorage.getItem(REMOTE_KEY)); } catch {}
+
+async function api(action, payload = {}, conf = remote) {
+  // text/plain keeps this a "simple" CORS request, which Apps Script web apps accept.
+  const res = await fetch(conf.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ key: conf.key, action, ...payload }),
+  });
+  let data;
+  try { data = await res.json(); } catch { throw new Error('bad_response'); }
+  if (!data.ok) throw new Error(data.error || 'error');
+  return data.docs;
+}
+
+function setSync(text, isError) {
+  const el = $('#sync');
+  el.textContent = text;
+  el.classList.toggle('err', !!isError);
+  $('#storageHint').textContent = remote
+    ? 'База хранится в Google Таблице на вашем Диске. На устройстве — копия для работы без интернета.'
+    : 'Данные хранятся только на этом устройстве, в браузере. Подключите Google Диск или делайте резервную копию.';
+  $('#driveMenuHint').textContent = remote ? 'Подключено · изменить или отключить' : 'Хранить базу в Google Таблице и получать письма-напоминания';
+}
+
+function applyRemote(list) {
+  docs = list;
+  save(); render();
+  setSync('☁️ Google Диск · синхронизировано');
+  checkAndNotify();
+}
+
+async function pull() {
+  if (!remote) return setSync('📱 Только на этом устройстве');
+  setSync('☁️ Синхронизация…');
+  try { applyRemote(await api('list')); }
+  catch (e) { setSync(syncError(e), true); }
+}
+
+function syncError(e) {
+  if (e.message === 'bad_key') return '⚠️ Неверный ключ доступа Google Диска';
+  return navigator.onLine ? '⚠️ Google Диск недоступен · показана копия с устройства' : '📴 Нет интернета · показана копия с устройства';
+}
+
+// All edits go to the sheet first, so the sheet stays the single source of truth.
+async function mutate(action, payload, localApply) {
+  if (!remote) { localApply(); save(); render(); return true; }
+  setSync('☁️ Сохранение…');
+  try { applyRemote(await api(action, payload)); return true; }
+  catch (e) { setSync(syncError(e), true); toast('Не удалось сохранить на Google Диск'); return false; }
+}
+
 // ---------- render ----------
 function render() {
   const items = docs.map(d => ({ d, s: status(d) })).sort((a, b) => a.s.exp - b.s.exp);
@@ -333,6 +399,7 @@ function openDoc(id) {
   const d = docs.find(x => x.id === id);
   $('#docDlgTitle').textContent = d ? 'Редактировать' : 'Новый документ';
   $('#deleteBtn').hidden = !d;
+  if (d && ![...form.elements.type.options].some(o => o.value === d.type)) form.elements.type.add(new Option(d.type));
   if (d) for (const k of ['type', 'name', 'issued', 'expires', 'leadValue', 'leadUnit', 'note']) form.elements[k].value = d[k] ?? '';
   updateLeadHint();
   $('#docDlg').showModal();
@@ -349,7 +416,7 @@ form.elements.type.addEventListener('change', e => {
   if (!form.elements.name.value) form.elements.name.value = e.target.value;
 });
 
-form.addEventListener('submit', e => {
+form.addEventListener('submit', async e => {
   e.preventDefault();
   const f = form.elements;
   if (f.issued.value && f.issued.value > f.expires.value) { toast('Дата выдачи позже даты окончания'); return; }
@@ -358,19 +425,23 @@ form.addEventListener('submit', e => {
     type: f.type.value, name: f.name.value.trim(), issued: f.issued.value, expires: f.expires.value,
     leadValue: Math.max(0, parseInt(f.leadValue.value, 10) || 0), leadUnit: f.leadUnit.value, note: f.note.value.trim(),
   };
-  const i = docs.findIndex(x => x.id === data.id);
-  if (i >= 0) docs[i] = data; else docs.push(data);
-  save(); render();
+  const btn = form.querySelector('[type=submit]');
+  btn.disabled = true;
+  const ok = await mutate('upsert', { doc: data }, () => {
+    const i = docs.findIndex(x => x.id === data.id);
+    if (i >= 0) docs[i] = data; else docs.push(data);
+  });
+  btn.disabled = false;
+  if (!ok) return;
   $('#docDlg').close();
   checkAndNotify();
   maybeShowNotifBanner();
 });
 
-$('#deleteBtn').addEventListener('click', () => {
+$('#deleteBtn').addEventListener('click', async () => {
   if (!confirm('Удалить документ?')) return;
-  docs = docs.filter(x => x.id !== editingId);
-  save(); render();
-  $('#docDlg').close();
+  const id = editingId;
+  if (await mutate('delete', { id }, () => { docs = docs.filter(x => x.id !== id); })) $('#docDlg').close();
 });
 
 $('#list').addEventListener('click', e => { const b = e.target.closest('.doc'); if (b) openDoc(b.dataset.id); });
@@ -441,7 +512,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(() => { syncToServiceWorker(); registerPeriodicSync(); });
 }
 
-// ---------- menu: calendar, telegram, backup ----------
+// ---------- menu: calendar, Google Drive, backup ----------
 $('#menuBtn').addEventListener('click', () => $('#menuDlg').showModal());
 
 function icsEscape(s) { return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n'); }
@@ -478,15 +549,43 @@ $('#icsBtn').addEventListener('click', () => {
   toast('Откройте файл — события с напоминаниями добавятся в календарь');
 });
 
-const telegramPayload = () => JSON.stringify(docs.map(({ name, type, expires, leadValue, leadUnit }) => ({ name, type, expires, leadValue, leadUnit })));
-$('#tgBtn').addEventListener('click', () => {
+const driveForm = $('#driveForm');
+$('#driveBtn').addEventListener('click', () => {
   $('#menuDlg').close();
-  $('#tgJson').textContent = telegramPayload();
-  $('#tgDlg').showModal();
+  driveForm.elements.url.value = remote?.url || '';
+  driveForm.elements.key.value = remote?.key || '';
+  $('#driveOff').hidden = !remote;
+  $('#driveOn').textContent = remote ? 'Сохранить' : 'Подключить';
+  $('#driveDlg').showModal();
 });
-$('#tgCopy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(telegramPayload()); toast('Скопировано'); }
-  catch { toast('Не удалось скопировать — выделите текст вручную'); }
+driveForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const conf = { url: driveForm.elements.url.value.trim(), key: driveForm.elements.key.value.trim() };
+  if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(conf.url)) return toast('Адрес должен начинаться с https://script.google.com/');
+  $('#driveOn').disabled = true;
+  try {
+    let list = await api('list', {}, conf);
+    // First connection: upload documents that exist only on this device.
+    const known = new Set(list.map(d => d.id));
+    const localOnly = docs.filter(d => !known.has(d.id));
+    if (localOnly.length) list = await api('replace', { docs: [...list, ...localOnly] }, conf);
+    remote = conf;
+    localStorage.setItem(REMOTE_KEY, JSON.stringify(remote));
+    applyRemote(list);
+    $('#driveDlg').close();
+    toast(localOnly.length ? `Подключено. Перенесено на Диск: ${localOnly.length}` : 'Google Диск подключён');
+  } catch (err) {
+    toast(err.message === 'bad_key' ? 'Неверный ключ доступа' : 'Не удалось подключиться — проверьте адрес и настройку доступа');
+  } finally {
+    $('#driveOn').disabled = false;
+  }
+});
+$('#driveOff').addEventListener('click', () => {
+  if (!confirm('Отключить Google Диск? Таблица останется на Диске, а на устройстве сохранится последняя копия.')) return;
+  remote = null;
+  localStorage.removeItem(REMOTE_KEY);
+  setSync('📱 Только на этом устройстве');
+  $('#driveDlg').close();
 });
 
 $('#exportBtn').addEventListener('click', () => download(`documents-${fmtISO(today())}.json`, JSON.stringify(docs, null, 2), 'application/json'));
@@ -497,8 +596,8 @@ $('#importFile').addEventListener('change', async e => {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data) || !data.every(d => d.name && d.expires)) throw 0;
     if (docs.length && !confirm(`Заменить текущие документы (${docs.length}) данными из файла (${data.length})?`)) return;
-    docs = data.map(d => ({ id: d.id || String(Math.random()).slice(2), type: d.type || 'Другое', issued: '', note: '', leadValue: 0, leadUnit: 'd', ...d }));
-    save(); render(); $('#menuDlg').close(); toast('Данные восстановлены');
+    const list = data.map(d => ({ id: d.id || String(Math.random()).slice(2), type: d.type || 'Другое', issued: '', note: '', leadValue: 0, leadUnit: 'd', ...d }));
+    if (await mutate('replace', { docs: list }, () => { docs = list; })) { $('#menuDlg').close(); toast('Данные восстановлены'); }
   } catch { toast('Неверный файл'); }
   e.target.value = '';
 });
@@ -512,7 +611,8 @@ function toast(msg) {
 render();
 maybeShowNotifBanner();
 checkAndNotify();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); checkAndNotify(); } });
+pull();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); checkAndNotify(); pull(); } });
 </script>
 </body>
 </html>
