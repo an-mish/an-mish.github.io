@@ -94,6 +94,8 @@ dialog {
   border: 0; border-radius: 16px; padding: 0; width: min(520px, calc(100vw - 24px));
   background: var(--card); color: var(--text); max-height: calc(100vh - 24px);
 }
+dialog * { min-width: 0; }
+dialog { overflow-x: hidden; }
 dialog::backdrop { background: rgba(0,0,0,.45); }
 .dlg { padding: 18px 16px 16px; display: grid; gap: 14px; }
 .dlg h2 { margin: 0; font-size: 1.2rem; }
@@ -111,7 +113,7 @@ textarea { min-height: 70px; resize: vertical; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .actions .spacer { flex: 1; }
 .menu { display: grid; gap: 8px; }
-.menu .btn { text-align: left; }
+.menu .btn { text-align: left; white-space: normal; }
 .menu small { display: block; color: var(--muted); font-size: .8rem; }
 .sync { font-size: .8rem; color: var(--muted); margin-top: 2px; }
 .sync.err { color: var(--bad); }
