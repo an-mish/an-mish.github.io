@@ -1,4 +1,4 @@
-const SHELL = 'doctrack-shell-v6';
+const SHELL = 'doctrack-shell-v7';
 const DATA = 'doctrack-data';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
@@ -54,7 +54,7 @@ async function backgroundCheck() {
   for (const d of docs) {
     const exp = parseDate(d.expires);
     const left = Math.round((exp - t) / DAY);
-    if (t < subtractLead(exp, d.leadValue, d.leadUnit) || sent[d.id] === tISO) continue;
+    if (d.submitted || t < subtractLead(exp, d.leadValue, d.leadUnit) || sent[d.id] === tISO) continue;
     const body = left < 0 ? `«${d.name}» истёк. Срочно обновите документ.`
       : left === 0 ? `«${d.name}» истекает сегодня!`
       : `Пора обновить «${d.name}»: осталось ${left} дн.`;

@@ -9,8 +9,9 @@
 // For a standalone script project, put the spreadsheet ID from its URL here.
 const SHEET_ID = '';
 const SHEET_NAME = 'Документы';
-const HEADERS = ['id', 'Тип', 'Название', 'Дата выдачи', 'Действует до', 'Начать обновление за', 'Единица', 'Заметка'];
-const FIELDS = ['id', 'type', 'name', 'issued', 'expires', 'leadValue', 'leadUnit', 'note'];
+const HEADERS = ['id', 'Тип', 'Название', 'Дата выдачи', 'Действует до', 'Начать обновление за', 'Единица', 'Заметка',
+  'Подан на обновление'];
+const FIELDS = ['id', 'type', 'name', 'issued', 'expires', 'leadValue', 'leadUnit', 'note', 'submitted'];
 const UNITS = { d: 'дней', w: 'недель', m: 'месяцев' };
 const DAY = 86400000;
 const CALENDAR_NAME = 'Сроки документов';
@@ -96,6 +97,13 @@ function sheet_() {
     sh.getRange('D:E').setNumberFormat('dd.MM.yyyy');
     sh.hideColumns(1);
   }
+  // Sheets created by an older version of this script lack the newer columns.
+  const head = sh.getRange(1, 1, 1, HEADERS.length);
+  const current = head.getValues()[0];
+  if (current.some(v => !v)) {
+    head.setValues([HEADERS.map((h, i) => current[i] || h)]).setFontWeight('bold');
+    sh.getRange('I:I').setNumberFormat('dd.MM.yyyy');
+  }
   return sh;
 }
 
@@ -121,6 +129,7 @@ function readDocs_() {
     doc.leadValue = Math.max(0, parseInt(doc.leadValue, 10) || 0);
     doc.leadUnit = unitCode_(doc.leadUnit);
     doc.note = String(doc.note || '');
+    doc.submitted = toISO_(doc.submitted, tz);
     if (doc.expires) docs.push(doc);
   });
   if (idsAdded) sh.getRange(2, 1, rows, 1).setValues(values.map(r => [r[0]]));
@@ -134,7 +143,7 @@ function writeDocs_(docs) {
   if (!docs.length) return;
   const tz = sh.getParent().getSpreadsheetTimeZone();
   const rows = docs.map(d => [d.id, d.type, d.name, isoToDate_(d.issued, tz), isoToDate_(d.expires, tz),
-    d.leadValue, UNITS[d.leadUnit], d.note]);
+    d.leadValue, UNITS[d.leadUnit], d.note, isoToDate_(d.submitted, tz)]);
   sh.getRange(2, 1, rows.length, FIELDS.length).setValues(rows);
 }
 
@@ -150,6 +159,7 @@ function clean_(d) {
     leadValue: Math.max(0, parseInt(d.leadValue, 10) || 0),
     leadUnit: UNITS[d.leadUnit] ? d.leadUnit : 'd',
     note: String(d.note || '').slice(0, 2000),
+    submitted: iso.test(d.submitted) ? d.submitted : '',
   };
 }
 
@@ -193,7 +203,7 @@ function dailyCheck(force) {
     .sort((a, b) => a.exp - b.exp)
     .forEach(({ d, exp }) => {
       const start = subtractLead_(exp, d.leadValue, d.leadUnit);
-      if (today < start) return;
+      if (today < start || d.submitted) return; // already handed in for renewal
       const left = Math.round((exp - today) / DAY);
       // First day of the window, milestones, then a weekly Monday digest — not daily spam.
       const due = force || today === start || [60, 30, 14, 7, 3, 1, 0].indexOf(left) >= 0 || weekday === 1;

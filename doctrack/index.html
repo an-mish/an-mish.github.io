@@ -21,6 +21,7 @@
   --ok: #1f8a4c; --ok-bg: #e5f4ea;
   --warn: #a35d00; --warn-bg: #fdf0dc;
   --bad: #c0352b; --bad-bg: #fbe5e3;
+  --sub: #2f5bea; --sub-bg: #e6ecfd;
   --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
 }
 @media (prefers-color-scheme: dark) {
@@ -30,6 +31,7 @@
     --ok: #5fcf8d; --ok-bg: #173323;
     --warn: #f0b35a; --warn-bg: #3a2b14;
     --bad: #ff7b70; --bad-bg: #3d1b19;
+    --sub: #8aa4ff; --sub-bg: #1d2747;
     --shadow: none;
   }
 }
@@ -59,10 +61,11 @@ button, select, input, textarea { font: inherit; color: inherit; }
   margin-bottom: 14px; display: flex; gap: 8px; align-items: center; justify-content: space-between;
   font-size: .93rem;
 }
-.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+.summary { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-bottom: 16px; }
 .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow); }
 .stat b { display: block; font-size: 1.4rem; font-variant-numeric: tabular-nums; }
 .stat span { font-size: .8rem; color: var(--muted); }
+.stat.sub b { color: var(--sub); }
 .stat.bad b { color: var(--bad); } .stat.warn b { color: var(--warn); } .stat.ok b { color: var(--ok); }
 
 .list { display: grid; gap: 10px; }
@@ -77,6 +80,11 @@ button, select, input, textarea { font: inherit; color: inherit; }
 .pill.ok { color: var(--ok); background: var(--ok-bg); }
 .pill.warn { color: var(--warn); background: var(--warn-bg); }
 .pill.bad { color: var(--bad); background: var(--bad-bg); }
+.pill.sub { color: var(--sub); background: var(--sub-bg); }
+.note-ico { font-size: .9em; margin-left: 4px; }
+.check { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: .95rem; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.check input { width: 20px; height: 20px; min-height: 0; margin: 0; accent-color: var(--accent); }
 .doc-dates { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .85rem; color: var(--muted); }
 .doc-dates b { color: var(--text); font-weight: 500; }
 .bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
@@ -191,6 +199,9 @@ textarea { min-height: 70px; resize: vertical; }
       </div>
     </label>
     <p class="hint" id="leadHint"></p>
+    <label class="check" id="submittedRow" hidden>
+      <input type="checkbox" name="submitted"> Документы поданы на обновление
+    </label>
     <label>Заметка
       <textarea name="note" placeholder="Где оформлять, что нужно с собой…"></textarea>
     </label>
@@ -293,6 +304,8 @@ function status(doc) {
   else if (left === 0) { level = 'bad'; label = 'Истекает сегодня'; }
   else if (t >= start) { level = 'warn'; label = `Пора обновлять · ${daysWord(left)}`; }
   else { level = 'ok'; label = `Обновить с ${fmtRu(start)}`; }
+  // Already handed in for renewal: no more nagging until the new expiry date is entered.
+  if (doc.submitted && level !== 'ok') { level = 'sub'; label = '📨 Подан на обновление'; }
   return { exp, start, left, level, label, untilStart: daysBetween(t, start) };
 }
 
@@ -368,11 +381,12 @@ async function mutate(action, payload, localApply) {
 // ---------- render ----------
 function render() {
   const items = docs.map(d => ({ d, s: status(d) })).sort((a, b) => a.s.exp - b.s.exp);
-  const counts = { bad: 0, warn: 0, ok: 0 };
+  const counts = { bad: 0, warn: 0, sub: 0, ok: 0 };
   items.forEach(i => counts[i.s.level]++);
   $('#summary').innerHTML = docs.length ? `
     <div class="stat bad"><b>${counts.bad}</b><span>Истекли</span></div>
     <div class="stat warn"><b>${counts.warn}</b><span>Пора обновлять</span></div>
+    ${counts.sub ? `<div class="stat sub"><b>${counts.sub}</b><span>Поданы</span></div>` : ''}
     <div class="stat ok"><b>${counts.ok}</b><span>В порядке</span></div>` : '';
   $('#summary').hidden = !docs.length;
 
@@ -390,13 +404,14 @@ function render() {
     } else if (s.left < 0) pct = 0;
     return `<button class="doc" data-id="${d.id}">
       <div>
-        <div class="doc-name">${esc(d.name)}</div>
+        <div class="doc-name">${esc(d.name)}${d.note ? `<span class="note-ico" title="${esc(d.note)}" aria-label="Есть заметка">📝</span>` : ''}</div>
         <div class="doc-sub"><span class="doc-type">${esc(d.type)}</span><span class="pill ${s.level}">${s.label}</span></div>
       </div>
       <div class="bar"><i style="width:${pct}%;background:${color}"></i></div>
       <div class="doc-dates">
         ${d.issued ? `<span>Выдан <b>${fmtRu(parseDate(d.issued))}</b></span>` : ''}
         <span>До <b>${fmtRu(s.exp)}</b></span>
+        ${s.level === 'sub' ? `<span>Подан <b>${fmtRu(parseDate(d.submitted))}</b></span>` : ''}
         ${s.level === 'ok' ? `<span>Осталось <b>${daysWord(s.left)}</b></span>` : ''}
       </div>
     </button>`;
@@ -416,6 +431,8 @@ function openDoc(id) {
   $('#deleteBtn').hidden = !d;
   if (d && ![...form.elements.type.options].some(o => o.value === d.type)) form.elements.type.add(new Option(d.type));
   if (d) for (const k of ['type', 'name', 'issued', 'expires', 'leadValue', 'leadUnit', 'note']) form.elements[k].value = d[k] ?? '';
+  form.elements.submitted.checked = !!d?.submitted;
+  $('#submittedRow').hidden = !d || (status(d).level === 'ok' && !d.submitted);
   updateLeadHint();
   $('#docDlg').showModal();
 }
@@ -435,8 +452,14 @@ form.addEventListener('submit', async e => {
   e.preventDefault();
   const f = form.elements;
   if (f.issued.value && f.issued.value > f.expires.value) { toast('Дата выдачи позже даты окончания'); return; }
+  const orig = docs.find(x => x.id === editingId);
+  let submitted = f.submitted.checked ? (orig?.submitted || fmtISO(today())) : '';
+  // A new expiry date means the renewed document has arrived.
+  const renewed = orig?.submitted && submitted && f.expires.value !== orig.expires;
+  if (renewed) submitted = '';
   const data = {
     id: editingId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    submitted,
     type: f.type.value, name: f.name.value.trim(), issued: f.issued.value, expires: f.expires.value,
     leadValue: Math.max(0, parseInt(f.leadValue.value, 10) || 0), leadUnit: f.leadUnit.value, note: f.note.value.trim(),
   };
@@ -449,6 +472,10 @@ form.addEventListener('submit', async e => {
   btn.disabled = false;
   if (!ok) return;
   $('#docDlg').close();
+  if (renewed) toast('Срок обновлён — отметка «подан» снята');
+  else if (submitted && remote && !docs.find(x => x.id === data.id)?.submitted) {
+    toast('Отметка не сохранилась в Таблице — обновите код скрипта (см. инструкцию)');
+  }
   checkAndNotify();
   maybeShowNotifBanner();
 });
@@ -487,7 +514,7 @@ async function checkAndNotify() {
   for (const d of docs) {
     const s = status(d);
     // Once per day per document; in-app also nudges for anything in the window not yet nudged today.
-    if (s.level === 'ok' || sent[d.id] === t) continue;
+    if ((s.level !== 'warn' && s.level !== 'bad') || sent[d.id] === t) continue;
     if (await showNotification('Обновите документ', messageFor(d, s), d.id)) sent[d.id] = t;
   }
   localStorage.setItem(NOTIFIED_KEY, JSON.stringify(sent));
@@ -633,7 +660,7 @@ $('#importFile').addEventListener('change', async e => {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data) || !data.every(d => d.name && d.expires)) throw 0;
     if (docs.length && !confirm(`Заменить текущие документы (${docs.length}) данными из файла (${data.length})?`)) return;
-    const list = data.map(d => ({ id: d.id || String(Math.random()).slice(2), type: d.type || 'Другое', issued: '', note: '', leadValue: 0, leadUnit: 'd', ...d }));
+    const list = data.map(d => ({ id: d.id || String(Math.random()).slice(2), type: d.type || 'Другое', issued: '', note: '', submitted: '', leadValue: 0, leadUnit: 'd', ...d }));
     if (await mutate('replace', { docs: list }, () => { docs = list; })) { $('#menuDlg').close(); toast('Данные восстановлены'); }
   } catch { toast('Неверный файл'); }
   e.target.value = '';
