@@ -61,10 +61,10 @@ button, select, input, textarea { font: inherit; color: inherit; }
   margin-bottom: 14px; display: flex; gap: 8px; align-items: center; justify-content: space-between;
   font-size: .93rem;
 }
-.summary { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-bottom: 16px; }
-.stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow); }
-.stat b { display: block; font-size: 1.4rem; font-variant-numeric: tabular-nums; }
-.stat span { font-size: .8rem; color: var(--muted); }
+.summary { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin-bottom: 16px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px; box-shadow: var(--shadow); min-width: 0; }
+.stat b { display: block; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.stat span { display: block; font-size: .74rem; line-height: 1.25; color: var(--muted); overflow-wrap: break-word; }
 .stat.sub b { color: var(--sub); }
 .stat.bad b { color: var(--bad); } .stat.warn b { color: var(--warn); } .stat.ok b { color: var(--ok); }
 
@@ -132,6 +132,7 @@ textarea { min-height: 70px; resize: vertical; }
 }
 .toast.show { opacity: 1; }
 @media (max-width: 380px) { .row { grid-template-columns: 1fr; } }
+@media (max-width: 350px) { .stat { padding: 7px 6px; } .stat span { font-size: .68rem; } }
 </style>
 </head>
 <body>
@@ -385,7 +386,7 @@ function render() {
   items.forEach(i => counts[i.s.level]++);
   $('#summary').innerHTML = docs.length ? `
     <div class="stat bad"><b>${counts.bad}</b><span>Истекли</span></div>
-    <div class="stat warn"><b>${counts.warn}</b><span>Пора обновлять</span></div>
+    <div class="stat warn"><b>${counts.warn}</b><span>Обновить</span></div>
     ${counts.sub ? `<div class="stat sub"><b>${counts.sub}</b><span>Поданы</span></div>` : ''}
     <div class="stat ok"><b>${counts.ok}</b><span>В порядке</span></div>` : '';
   $('#summary').hidden = !docs.length;
