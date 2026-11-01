@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f7f4f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#18161a" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Прайс">
+<title>Прайс косметолога</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+:root {
+  --bg: #f7f4f3; --card: #ffffff; --text: #1f1c1e; --muted: #6f686c; --line: #e7e1df;
+  --accent: #b0476e; --accent-ink: #fff; --accent-bg: #f8e8ee;
+  --ok: #1f8a4c; --ok-bg: #e5f4ea;
+  --bad: #c0352b; --bad-bg: #fbe5e3;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #18161a; --card: #222024; --text: #eeeaec; --muted: #a29ca0; --line: #343036;
+    --accent: #e57ba3; --accent-ink: #1a0d13; --accent-bg: #3a1d29;
+    --ok: #5fcf8d; --ok-bg: #173323;
+    --bad: #ff7b70; --bad-bg: #3d1b19;
+    --shadow: none;
+  }
+}
+html, body { margin: 0; }
+body {
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+  background: var(--bg); color: var(--text);
+  padding: env(safe-area-inset-top) 0 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap { max-width: 640px; margin: 0 auto; padding: 18px 16px calc(96px + env(safe-area-inset-bottom)); }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+h1 { font-size: 1.45rem; margin: 0; letter-spacing: -.01em; }
+.sub { color: var(--muted); font-size: .9rem; }
+button, select, input, textarea { font: inherit; color: inherit; }
+.btn {
+  border: 1px solid var(--line); background: var(--card); border-radius: 10px;
+  padding: 9px 14px; cursor: pointer; white-space: nowrap;
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.danger { color: var(--bad); }
+.btn.block { width: 100%; }
+.icon-btn { border: 0; background: none; padding: 8px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 1.3rem; line-height: 1; }
+
+.search { width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-bottom: 12px; }
+.list { display: grid; gap: 10px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+  box-shadow: var(--shadow); display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left; width: 100%;
+}
+.card .main { flex: 1; min-width: 0; }
+.card .name { font-weight: 600; overflow-wrap: anywhere; }
+.card .meta { color: var(--muted); font-size: .86rem; }
+.card .price { font-weight: 700; font-size: 1.15rem; white-space: nowrap; text-align: right; }
+.card .price small { display: block; font-weight: 500; font-size: .78rem; color: var(--muted); }
+.pill { display: inline-block; font-size: .75rem; padding: 1px 8px; border-radius: 99px; background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.pos { color: var(--ok); } .neg { color: var(--bad); }
+.empty { text-align: center; color: var(--muted); padding: 32px 8px; }
+.fab-row { margin-top: 14px; }
+
+.summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow); min-width: 0; }
+.tile .k { color: var(--muted); font-size: .8rem; }
+.tile .v { font-weight: 700; font-size: 1.2rem; overflow-wrap: anywhere; }
+.tile.accent { background: var(--accent-bg); border-color: transparent; }
+.tile.accent .v { color: var(--accent); }
+
+.qty { display: flex; align-items: center; gap: 4px; }
+.qty button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+.qty b { min-width: 20px; text-align: center; }
+.card.picked { border-color: var(--accent); }
+
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--card); border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  padding: 4px 4px env(safe-area-inset-bottom);
+}
+nav.tabs button { border: 0; background: none; padding: 8px 2px 6px; cursor: pointer; color: var(--muted); font-size: .72rem; display: grid; justify-items: center; gap: 2px; }
+nav.tabs button span { font-size: 1.25rem; line-height: 1; }
+nav.tabs button.on { color: var(--accent); font-weight: 600; }
+
+dialog {
+  border: 0; padding: 0; width: min(560px, 100vw); max-width: 100vw; max-height: 92dvh;
+  margin: auto auto 0; border-radius: 18px 18px 0 0; background: var(--card); color: var(--text);
+}
+@media (min-width: 600px) { dialog { margin: auto; border-radius: 18px; } }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+.sheet { padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+.sheet h2 { margin: 0 0 12px; font-size: 1.2rem; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.field { display: grid; gap: 4px; margin-bottom: 12px; }
+.field label { font-size: .85rem; color: var(--muted); }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+}
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hint { font-size: .8rem; color: var(--muted); margin: -6px 0 12px; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 16px; }
+.actions .spacer { flex: 1; }
+
+table.br { width: 100%; border-collapse: collapse; font-size: .92rem; }
+table.br td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.br td:last-child { text-align: right; white-space: nowrap; padding-left: 10px; }
+table.br tr.total td { font-weight: 700; border-bottom: 0; font-size: 1.05rem; }
+table.br tr.sec td { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; padding-top: 14px; }
+table.br .m { color: var(--muted); font-size: .82rem; }
+
+.item-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px 34px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.item-row select, .item-row input { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+.item-row .c { grid-column: 1 / -1; font-size: .78rem; color: var(--muted); margin: -2px 0 4px 2px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 99px; font-size: .9rem; z-index: 20;
+  max-width: calc(100vw - 32px);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="title">Услуги</h1>
+      <div class="sub" id="rate"></div>
+    </div>
+    <button class="icon-btn" id="settingsBtn" aria-label="Настройки">⚙︎</button>
+  </header>
+  <main id="view"></main>
+</div>
+
+<nav class="tabs">
+  <button data-tab="services" class="on"><span>💆</span>Услуги</button>
+  <button data-tab="visit"><span>🧾</span>Визит</button>
+  <button data-tab="materials"><span>🧴</span>Материалы</button>
+  <button data-tab="costs"><span>🏠</span>Затраты</button>
+</nav>
+
+<dialog id="dlg"><div class="sheet" id="dlgBody"></div></dialog>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+'use strict';
+const KEY = 'kosmetolog-v1';
+
+/* ---------- Default data (from the Notion workspace) ---------- */
+const DEFAULTS = {
+  settings: { hours: 100, pauseShare: 50, markup: 0, roundTo: 0, currency: '€' },
+  costs: [
+    ['Аренда', 200], ['Ток', 80], ['Вода', 3], ['Телефон', 13], ['Интернет', 5], ['Осигуровки', 300],
+    ['Зарплата', 1100], ['Парковка', 80], ['Стирка', 100], ['Патент', 35], ['Реклама', 100]
+  ].map(([name, monthly], i) => ({ id: 'c' + i, name, monthly })),
+  materials: [
+    { id: 'tnt', name: 'TNT', volume: 50, unit: 'шт', type: 'Однократный консуматив', price: 7 },
+    { id: 'oil', name: 'Массажное масло', volume: 250, unit: 'мл', type: 'Прочее', price: 8 },
+    { id: 'gloves', name: 'Перчатки', volume: 25, unit: 'шт', type: 'Однократный консуматив', price: 9 },
+    { id: 'pads', name: 'Ватные диски', volume: 100, unit: 'шт', type: 'Однократный консуматив', price: 3 },
+    { id: 'pack', name: 'Пакет однократных', volume: 1, unit: 'шт', type: 'Однократный консуматив', price: 1 },
+    { id: 'cas', name: 'Кола маска касета', volume: 1, unit: 'шт', type: 'Прочее', price: 1.5 },
+    { id: 'strip', name: 'Кола маска ленты', volume: 250, unit: 'шт', type: 'Однократный консуматив', price: 4 },
+    { id: 'coil', name: 'Кола маска масло', volume: 150, unit: 'мл', type: 'Косметический продукт', price: 1.53 },
+    { id: 'small', name: 'Кола маска малая зона пакет', volume: 1, unit: 'шт', type: 'Прочее', price: 1 },
+    { id: 'mid', name: 'Кола маска средняя зона пакет', volume: 1, unit: 'шт', type: 'Прочее', price: 1.5 },
+    { id: 'cream', name: 'Антицеллюлитный крем', volume: 300, unit: 'мл', type: 'Косметический продукт', price: 10 },
+    { id: 'dye', name: 'Краска для бровей и ресниц', volume: 15, unit: 'мл', type: 'Косметический продукт', price: 6 },
+    { id: 'ox', name: 'Оксидант', volume: 100, unit: 'мл', type: 'Прочее', price: 6.4 },
+    { id: 'clean', name: 'Для очистки пакет', volume: 1, unit: 'шт', type: 'Прочее', price: 1 },
+    { id: 'anti', name: 'Антиоксидантна изсветляваща терапия 35%', volume: 6, unit: 'шт', type: 'Косметический продукт', brand: 'Skeyndor', price: 75.48, link: 'https://crimson.bg/produkt/antioksidantna-izsvetljavashta-terapija/' },
+    { id: 'hydra', name: 'Интензивна хидратираща терапия', volume: 6, unit: 'шт', type: 'Косметический продукт', brand: 'Skeyndor', price: 73.27 }
+  ],
+  services: [
+    ['Массаж тела полный', 60, 30, { oil: 30 }],
+    ['Массаж тела частичный', 30, 20, { oil: 15 }],
+    ['Чистка лица', 90, 15, { pack: 1, clean: 1 }],
+    ['Кола маска ноги', 40, 15, { cas: 2, tnt: 2, strip: 50, coil: 10 }],
+    ['Кола маска ноги 1/2', 20, 10, { tnt: 2, strip: 20, cas: 1, coil: 10 }],
+    ['Кола маска подмышки', 10, 5, { mid: 1 }],
+    ['Кола маска руки', 20, 10, { cas: 1, strip: 20, coil: 10 }],
+    ['Кола маска руки 1/2', 15, 10, { strip: 10, cas: 0.5, coil: 10 }],
+    ['Массаж головы', 20, 10, { tnt: 1 }],
+    ['Массаж антицеллюлитный 1 час', 60, 30, { cream: 60, oil: 30 }],
+    ['Массаж антицеллюлитный 1/2', 40, 20, { cream: 60, oil: 30 }],
+    ['Коррекция бровей', 30, 5, { small: 0.5 }],
+    ['Коррекция и окрашивание бровей краской', 40, 5, { small: 0.5, dye: 0.5, ox: 3 }],
+    ['Антиоксидантна изсветляваща терапия', 75, 15, { anti: 1, clean: 1, tnt: 1, pack: 1 }],
+    ['Интензивна хидратираща терапия', 75, 15, { hydra: 1, tnt: 1, clean: 1, pack: 1 }]
+  ].map(([name, duration, pause, items], i) => ({
+    id: 's' + i, name, duration, pause, myPrice: null,
+    items: Object.entries(items).map(([m, qty]) => ({ m, qty }))
+  }))
+};
+
+/* ---------- State ---------- */
+const clone = o => JSON.parse(JSON.stringify(o));
+let db;
+try { db = JSON.parse(localStorage.getItem(KEY)); } catch { db = null; }
+if (!db || !Array.isArray(db.services)) db = clone(DEFAULTS);
+db.settings = { ...DEFAULTS.settings, ...db.settings };
+function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { toast('Не удалось сохранить в памяти браузера'); } }
+
+let tab = 'services', query = '', visit = {};
+try { visit = JSON.parse(sessionStorage.getItem(KEY + '-visit')) || {}; } catch {}
+const saveVisit = () => { try { sessionStorage.setItem(KEY + '-visit', JSON.stringify(visit)); } catch {} };
+
+/* ---------- Helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.').replace(/\s/g, '')); return Number.isFinite(n) ? n : 0; };
+const nf2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const nfq = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 });
+const nfu = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const money = v => `${nf2.format(v)} ${db.settings.currency}`;
+const q = v => nfq.format(v);
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const mins = m => m >= 60 ? `${Math.floor(m / 60)} ч${m % 60 ? ' ' + (m % 60) + ' мин' : ''}` : `${m} мин`;
+const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
+
+/* ---------- Calculation ---------- */
+const monthlyTotal = () => db.costs.reduce((s, c) => s + num(c.monthly), 0);
+const hourRate = () => db.settings.hours > 0 ? monthlyTotal() / db.settings.hours : 0;
+const matById = id => db.materials.find(m => m.id === id);
+const unitPrice = m => m && m.volume > 0 ? m.price / m.volume : 0;
+
+function calc(s) {
+  const st = db.settings;
+  const billedMin = num(s.duration) + num(s.pause) * st.pauseShare / 100;
+  const fixed = hourRate() / 60 * billedMin;
+  const lines = s.items.map(it => { const m = matById(it.m); return { m, qty: it.qty, cost: unitPrice(m) * num(it.qty) }; });
+  const materials = lines.reduce((a, l) => a + l.cost, 0);
+  const cost = fixed + materials;
+  const withMarkup = cost * (1 + st.markup / 100);
+  const price = st.roundTo > 0 ? Math.ceil(withMarkup / st.roundTo - 1e-9) * st.roundTo : withMarkup;
+  const myPrice = s.myPrice != null && s.myPrice !== '' ? num(s.myPrice) : null;
+  return { billedMin, fixed, lines, materials, cost, price, myPrice };
+}
+
+/* ---------- Views ---------- */
+const TITLES = { services: 'Услуги', visit: 'Расчёт визита', materials: 'Материалы', costs: 'Постоянные затраты' };
+
+function render() {
+  $('#title').textContent = TITLES[tab];
+  $('#rate').textContent = `Час работы: ${money(hourRate())} · ${db.settings.hours} ч/мес`;
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  const v = $('#view');
+  if (tab === 'services') v.innerHTML = viewServices();
+  else if (tab === 'visit') v.innerHTML = viewVisit();
+  else if (tab === 'materials') v.innerHTML = viewMaterials();
+  else v.innerHTML = viewCosts();
+  const s = $('#search');
+  if (s) { s.value = query; s.oninput = () => { query = s.value; const pos = s.selectionStart; render(); const n = $('#search'); n.focus(); n.setSelectionRange(pos, pos); }; }
+}
+
+const match = name => !query || name.toLowerCase().includes(query.trim().toLowerCase());
+
+function viewServices() {
+  const list = db.services.filter(s => match(s.name));
+  return `<input id="search" class="search" type="search" placeholder="Поиск услуги">
+  <div class="list">${list.map(s => {
+    const c = calc(s);
+    let extra = '';
+    if (c.myPrice != null) {
+      const d = c.myPrice - c.cost;
+      extra = `<small>ваша ${money(c.myPrice)} · <span class="${d >= 0 ? 'pos' : 'neg'}">${d >= 0 ? '+' : '−'}${nf2.format(Math.abs(d))}</span></small>`;
+    } else if (Math.abs(c.price - c.cost) > 0.005) extra = `<small>себест. ${money(c.cost)}</small>`;
+    return `<button class="card" data-act="service" data-id="${s.id}">
+      <div class="main"><div class="name">${esc(s.name)}</div>
+      <div class="meta">${mins(num(s.duration))}${num(s.pause) ? ' + пауза ' + num(s.pause) + ' мин' : ''} · материалы ${money(c.materials)}</div></div>
+      <div class="price">${money(c.price)}${extra}</div></button>`;
+  }).join('') || '<div class="empty">Ничего не найдено</div>'}</div>
+  <div class="fab-row"><button class="btn primary block" data-act="newService">＋ Добавить услугу</button></div>`;
+}
+
+function viewVisit() {
+  const picked = db.services.filter(s => visit[s.id] > 0);
+  let total = 0, cost = 0, time = 0;
+  picked.forEach(s => {
+    const c = calc(s), n = visit[s.id];
+    total += (c.myPrice ?? c.price) * n; cost += c.cost * n; time += num(s.duration) * n;
+  });
+  const list = db.services.filter(s => match(s.name));
+  return `<div class="summary">
+    <div class="tile accent"><div class="k">К оплате</div><div class="v">${money(total)}</div></div>
+    <div class="tile"><div class="k">Время</div><div class="v">${mins(time)}</div></div>
+    <div class="tile"><div class="k">Себестоимость</div><div class="v">${money(cost)}</div></div>
+    <div class="tile"><div class="k">Прибыль сверх затрат</div><div class="v ${total - cost >= 0 ? 'pos' : 'neg'}">${money(total - cost)}</div></div>
+  </div>
+  <p class="sub" style="margin:-4px 0 12px">Отметьте услуги, которые клиент получает за визит. ${picked.length ? '<button class="btn" data-act="clearVisit" style="padding:4px 10px;margin-left:6px">Очистить</button>' : ''}</p>
+  <input id="search" class="search" type="search" placeholder="Поиск услуги">
+  <div class="list">${list.map(s => {
+    const c = calc(s), n = visit[s.id] || 0;
+    return `<div class="card ${n ? 'picked' : ''}" data-act="visitAdd" data-id="${s.id}">
+      <div class="main"><div class="name">${esc(s.name)}</div>
+      <div class="meta">${money(c.myPrice ?? c.price)} · ${mins(num(s.duration))}</div></div>
+      <div class="qty">${n ? `<button data-act="visitDec" data-id="${s.id}" aria-label="Убрать">−</button><b>${n}</b>` : ''}
+      <button data-act="visitInc" data-id="${s.id}" aria-label="Добавить">+</button></div></div>`;
+  }).join('') || '<div class="empty">Ничего не найдено</div>'}</div>`;
+}
+
+function viewMaterials() {
+  const list = db.materials.filter(m => match(m.name)).sort(byName);
+  return `<input id="search" class="search" type="search" placeholder="Поиск материала">
+  <div class="list">${list.map(m => {
+    const used = db.services.filter(s => s.items.some(i => i.m === m.id)).length;
+    return `<button class="card" data-act="material" data-id="${m.id}">
+      <div class="main"><div class="name">${esc(m.name)}</div>
+      <div class="meta">${q(m.volume)} ${esc(m.unit)} за ${money(m.price)}${m.brand ? ' · ' + esc(m.brand) : ''}</div>
+      <div class="meta">${used ? `в ${used} усл.` : '<span class="pill">не используется</span>'}</div></div>
+      <div class="price">${nfu.format(unitPrice(m))} ${db.settings.currency}<small>за 1 ${esc(m.unit)}</small></div></button>`;
+  }).join('') || '<div class="empty">Ничего не найдено</div>'}</div>
+  <div class="fab-row"><button class="btn primary block" data-act="newMaterial">＋ Добавить материал</button></div>`;
+}
+
+function viewCosts() {
+  const total = monthlyTotal();
+  return `<div class="summary">
+    <div class="tile"><div class="k">В месяц</div><div class="v">${money(total)}</div></div>
+    <div class="tile accent"><div class="k">На 1 час</div><div class="v">${money(hourRate())}</div></div>
+  </div>
+  <div class="field"><label for="hours">Рабочих часов в месяц</label>
+    <input id="hours" type="text" inputmode="decimal" value="${db.settings.hours}"></div>
+  <div class="hint">Все затраты делятся на это число часов. Меньше часов — дороже каждая минута.</div>
+  <div class="list">${db.costs.map(c => `<button class="card" data-act="cost" data-id="${c.id}">
+    <div class="main"><div class="name">${esc(c.name)}</div>
+    <div class="meta">${money(db.settings.hours > 0 ? num(c.monthly) / db.settings.hours : 0)} в час</div></div>
+    <div class="price">${money(num(c.monthly))}<small>в месяц</small></div></button>`).join('')}</div>
+  <div class="fab-row"><button class="btn primary block" data-act="newCost">＋ Добавить статью</button></div>`;
+}
+
+/* ---------- Dialogs ---------- */
+const dlg = $('#dlg');
+function openSheet(html, onMount) {
+  $('#dlgBody').innerHTML = html;
+  if (!dlg.open) dlg.showModal();
+  onMount?.($('#dlgBody'));
+}
+const closeSheet = () => dlg.close();
+dlg.addEventListener('click', e => { if (e.target === dlg) closeSheet(); });
+
+function showService(id) {
+  const s = db.services.find(x => x.id === id); if (!s) return;
+  const c = calc(s), st = db.settings;
+  const rows = c.lines.map(l => `<tr><td>${esc(l.m?.name || '— материал удалён —')}<div class="m">${q(num(l.qty))} ${esc(l.m?.unit || '')} × ${nfu.format(unitPrice(l.m))} ${st.currency}</div></td><td>${money(l.cost)}</td></tr>`).join('');
+  const d = c.myPrice != null ? c.myPrice - c.cost : null;
+  openSheet(`<h2>${esc(s.name)}<button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></h2>
+    <table class="br">
+      <tr class="sec"><td colspan="2">Время</td></tr>
+      <tr><td>Процедура ${num(s.duration)} мин + ${st.pauseShare}% паузы ${num(s.pause)} мин<div class="m">${q(c.billedMin)} мин × ${money(hourRate())}/ч</div></td><td>${money(c.fixed)}</td></tr>
+      <tr class="sec"><td colspan="2">Материалы</td></tr>
+      ${rows || '<tr><td class="m">Нет материалов</td><td></td></tr>'}
+      <tr><td><b>Итого материалы</b></td><td><b>${money(c.materials)}</b></td></tr>
+      <tr class="sec"><td colspan="2">Итог</td></tr>
+      <tr><td>Себестоимость</td><td>${money(c.cost)}</td></tr>
+      ${st.markup ? `<tr><td>Наценка ${q(st.markup)}%</td><td>${money(c.cost * st.markup / 100)}</td></tr>` : ''}
+      <tr class="total"><td>Расчётная цена</td><td>${money(c.price)}</td></tr>
+      ${c.myPrice != null ? `<tr><td>Ваша цена в прайсе</td><td>${money(c.myPrice)}</td></tr>
+      <tr><td>Разница с себестоимостью</td><td class="${d >= 0 ? 'pos' : 'neg'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</td></tr>` : ''}
+    </table>
+    <div class="actions"><button class="btn" data-act="dupService" data-id="${s.id}">Копировать</button><span class="spacer"></span><button class="btn primary" data-act="editService" data-id="${s.id}">Изменить</button></div>`);
+}
+
+function materialOptions(sel) {
+  return [...db.materials].sort(byName).map(m => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
+}
+
+function editService(id) {
+  const orig = db.services.find(x => x.id === id);
+  const s = orig ? clone(orig) : { id: uid('s'), name: '', duration: 30, pause: 10, myPrice: null, items: [] };
+  const itemsHtml = () => s.items.map((it, i) => {
+    const m = matById(it.m);
+    return `<div class="item-row"><select data-i="${i}" data-f="m">${materialOptions(it.m)}</select>
+      <input data-i="${i}" data-f="qty" type="text" inputmode="decimal" value="${q(num(it.qty))}" aria-label="Количество">
+      <button class="icon-btn" data-i="${i}" data-f="del" aria-label="Удалить">✕</button>
+      <div class="c">${esc(m?.unit || '')} · ${money(unitPrice(m) * num(it.qty))}</div></div>`;
+  }).join('');
+  openSheet(`<h2>${orig ? 'Изменить услугу' : 'Новая услуга'}<button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></h2>
+    <div class="field"><label>Название</label><input id="f_name" value="${esc(s.name)}" placeholder="Например, Чистка лица"></div>
+    <div class="row2">
+      <div class="field"><label>Длительность, мин</label><input id="f_dur" type="text" inputmode="numeric" value="${s.duration}"></div>
+      <div class="field"><label>Пауза после, мин</label><input id="f_pause" type="text" inputmode="numeric" value="${s.pause}"></div>
+    </div>
+    <div class="field"><label>Ваша цена в прайсе (необязательно)</label><input id="f_my" type="text" inputmode="decimal" value="${s.myPrice ?? ''}" placeholder="Сравнить с себестоимостью"></div>
+    <div class="field"><label>Расход материалов на 1 процедуру</label><div id="items"></div>
+      <button class="btn" id="addItem" type="button">＋ Материал</button></div>
+    <div class="actions">${orig ? `<button class="btn danger" id="del">Удалить</button>` : ''}<span class="spacer"></span>
+      <button class="btn" data-act="close">Отмена</button><button class="btn primary" id="ok">Сохранить</button></div>`,
+  body => {
+    const box = body.querySelector('#items');
+    const draw = () => { box.innerHTML = itemsHtml(); };
+    draw();
+    box.addEventListener('change', e => {
+      const i = e.target.dataset.i; if (i == null) return;
+      if (e.target.dataset.f === 'm') s.items[i].m = e.target.value;
+      if (e.target.dataset.f === 'qty') s.items[i].qty = num(e.target.value);
+      draw();
+    });
+    box.addEventListener('click', e => {
+      const b = e.target.closest('[data-f="del"]'); if (!b) return;
+      s.items.splice(+b.dataset.i, 1); draw();
+    });
+    body.querySelector('#addItem').onclick = () => {
+      if (!db.materials.length) return toast('Сначала добавьте материал');
+      s.items.push({ m: [...db.materials].sort(byName)[0].id, qty: 1 }); draw();
+      box.querySelector('.item-row:last-of-type select')?.focus();
+    };
+    body.querySelector('#ok').onclick = () => {
+      s.name = body.querySelector('#f_name').value.trim();
+      if (!s.name) return toast('Введите название');
+      s.duration = num(body.querySelector('#f_dur').value);
+      s.pause = num(body.querySelector('#f_pause').value);
+      const my = body.querySelector('#f_my').value.trim();
+      s.myPrice = my === '' ? null : num(my);
+      if (orig) Object.assign(orig, s); else db.services.push(s);
+      save(); render(); showService(s.id);
+    };
+    body.querySelector('#del')?.addEventListener('click', () => {
+      if (!confirm(`Удалить «${s.name}»?`)) return;
+      db.services = db.services.filter(x => x.id !== id); delete visit[id]; saveVisit();
+      save(); render(); closeSheet();
+    });
+  });
+}
+
+function editMaterial(id) {
+  const orig = db.materials.find(x => x.id === id);
+  const m = orig ? clone(orig) : { id: uid('m'), name: '', volume: 1, unit: 'шт', type: 'Однократный консуматив', brand: '', price: 0, link: '' };
+  const usedIn = db.services.filter(s => s.items.some(i => i.m === m.id));
+  const types = ['Однократный консуматив', 'Косметический продукт', 'Прочее'];
+  openSheet(`<h2>${orig ? 'Материал' : 'Новый материал'}<button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></h2>
+    <div class="field"><label>Название</label><input id="f_name" value="${esc(m.name)}"></div>
+    <div class="row2">
+      <div class="field"><label>Объём упаковки</label><input id="f_vol" type="text" inputmode="decimal" value="${q(m.volume)}"></div>
+      <div class="field"><label>Единица</label><input id="f_unit" value="${esc(m.unit)}" list="units"></div>
+    </div>
+    <datalist id="units"><option value="шт"><option value="мл"><option value="г"><option value="м"></datalist>
+    <div class="row2">
+      <div class="field"><label>Цена упаковки, ${esc(db.settings.currency)}</label><input id="f_price" type="text" inputmode="decimal" value="${q(m.price)}"></div>
+      <div class="field"><label>Фирма</label><input id="f_brand" value="${esc(m.brand || '')}"></div>
+    </div>
+    <div class="field"><label>Тип</label><select id="f_type">${types.map(t => `<option ${t === m.type ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    <div class="field"><label>Ссылка на товар</label><input id="f_link" type="url" value="${esc(m.link || '')}" placeholder="https://"></div>
+    ${m.link ? `<div class="hint"><a href="${esc(m.link)}" target="_blank" rel="noopener">Открыть ссылку ↗</a></div>` : ''}
+    ${usedIn.length ? `<div class="hint">Используется: ${usedIn.map(s => esc(s.name)).join(', ')}</div>` : ''}
+    <div class="actions">${orig ? `<button class="btn danger" id="del">Удалить</button>` : ''}<span class="spacer"></span>
+      <button class="btn" data-act="close">Отмена</button><button class="btn primary" id="ok">Сохранить</button></div>`,
+  body => {
+    body.querySelector('#ok').onclick = () => {
+      m.name = body.querySelector('#f_name').value.trim();
+      if (!m.name) return toast('Введите название');
+      m.volume = num(body.querySelector('#f_vol').value);
+      if (m.volume <= 0) return toast('Объём должен быть больше 0');
+      m.unit = body.querySelector('#f_unit').value.trim() || 'шт';
+      m.price = num(body.querySelector('#f_price').value);
+      m.brand = body.querySelector('#f_brand').value.trim();
+      m.type = body.querySelector('#f_type').value;
+      m.link = body.querySelector('#f_link').value.trim();
+      if (orig) Object.assign(orig, m); else db.materials.push(m);
+      save(); render(); closeSheet(); toast('Сохранено');
+    };
+    body.querySelector('#del')?.addEventListener('click', () => {
+      const msg = usedIn.length ? `«${m.name}» используется в ${usedIn.length} усл. и будет убран из них. Удалить?` : `Удалить «${m.name}»?`;
+      if (!confirm(msg)) return;
+      db.materials = db.materials.filter(x => x.id !== id);
+      db.services.forEach(s => { s.items = s.items.filter(i => i.m !== id); });
+      save(); render(); closeSheet();
+    });
+  });
+}
+
+function editCost(id) {
+  const orig = db.costs.find(x => x.id === id);
+  const c = orig ? clone(orig) : { id: uid('c'), name: '', monthly: 0 };
+  openSheet(`<h2>${orig ? 'Статья расхода' : 'Новая статья'}<button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></h2>
+    <div class="field"><label>Название</label><input id="f_name" value="${esc(c.name)}"></div>
+    <div class="field"><label>Сумма в месяц, ${esc(db.settings.currency)}</label><input id="f_sum" type="text" inputmode="decimal" value="${q(num(c.monthly))}"></div>
+    <div class="actions">${orig ? `<button class="btn danger" id="del">Удалить</button>` : ''}<span class="spacer"></span>
+      <button class="btn" data-act="close">Отмена</button><button class="btn primary" id="ok">Сохранить</button></div>`,
+  body => {
+    body.querySelector('#ok').onclick = () => {
+      c.name = body.querySelector('#f_name').value.trim();
+      if (!c.name) return toast('Введите название');
+      c.monthly = num(body.querySelector('#f_sum').value);
+      if (orig) Object.assign(orig, c); else db.costs.push(c);
+      save(); render(); closeSheet();
+    };
+    body.querySelector('#del')?.addEventListener('click', () => {
+      if (!confirm(`Удалить «${c.name}»?`)) return;
+      db.costs = db.costs.filter(x => x.id !== id); save(); render(); closeSheet();
+    });
+  });
+}
+
+function editSettings() {
+  const st = db.settings;
+  openSheet(`<h2>Настройки<button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></h2>
+    <div class="row2">
+      <div class="field"><label>Учитывать паузу, %</label><input id="f_pause" type="text" inputmode="decimal" value="${q(st.pauseShare)}"></div>
+      <div class="field"><label>Наценка, %</label><input id="f_markup" type="text" inputmode="decimal" value="${q(st.markup)}"></div>
+    </div>
+    <div class="hint">Пауза после процедуры (уборка, подготовка) добавляется ко времени с этим весом. 50% — как в исходной таблице.</div>
+    <div class="row2">
+      <div class="field"><label>Округлять цену вверх до</label><select id="f_round">
+        ${[[0, 'не округлять'], [0.1, '0,10'], [0.5, '0,50'], [1, '1'], [5, '5']].map(([v, t]) => `<option value="${v}" ${v === st.roundTo ? 'selected' : ''}>${t}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Валюта</label><input id="f_cur" value="${esc(st.currency)}" maxlength="4"></div>
+    </div>
+    <div class="actions"><span class="spacer"></span><button class="btn primary" id="ok">Сохранить</button></div>
+    <h2 style="margin-top:22px">Данные</h2>
+    <div class="hint" style="margin:0 0 10px">Всё хранится только на этом телефоне. Сохраните копию, чтобы перенести на другое устройство.</div>
+    <div class="actions" style="justify-content:flex-start;margin-top:0">
+      <button class="btn" id="exp">Сохранить копию</button>
+      <button class="btn" id="imp">Загрузить копию</button>
+      <button class="btn danger" id="reset">Сбросить</button>
+      <input type="file" id="file" accept="application/json,.json" hidden>
+    </div>`,
+  body => {
+    body.querySelector('#ok').onclick = () => {
+      st.pauseShare = num(body.querySelector('#f_pause').value);
+      st.markup = num(body.querySelector('#f_markup').value);
+      st.roundTo = num(body.querySelector('#f_round').value);
+      st.currency = body.querySelector('#f_cur').value.trim() || '€';
+      save(); render(); closeSheet(); toast('Настройки сохранены');
+    };
+    body.querySelector('#exp').onclick = () => {
+      const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `prais-kosmetologa-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    const file = body.querySelector('#file');
+    body.querySelector('#imp').onclick = () => file.click();
+    file.onchange = async () => {
+      try {
+        const data = JSON.parse(await file.files[0].text());
+        if (!Array.isArray(data.services) || !Array.isArray(data.materials) || !Array.isArray(data.costs)) throw 0;
+        db = data; db.settings = { ...DEFAULTS.settings, ...db.settings };
+        save(); render(); closeSheet(); toast('Данные загружены');
+      } catch { toast('Файл не подходит'); }
+    };
+    body.querySelector('#reset').onclick = () => {
+      if (!confirm('Вернуть исходные услуги, материалы и затраты? Ваши изменения пропадут.')) return;
+      db = clone(DEFAULTS); visit = {}; saveVisit(); save(); render(); closeSheet(); toast('Данные сброшены');
+    };
+  });
+}
+
+/* ---------- Events ---------- */
+let toastTimer;
+function toast(t) {
+  const el = $('#toast'); el.textContent = t; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 2200);
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act], nav.tabs button'); if (!t) return;
+  if (t.dataset.tab) { tab = t.dataset.tab; query = ''; render(); window.scrollTo(0, 0); return; }
+  const id = t.dataset.id;
+  switch (t.dataset.act) {
+    case 'close': closeSheet(); break;
+    case 'service': showService(id); break;
+    case 'editService': editService(id); break;
+    case 'newService': editService(null); break;
+    case 'dupService': {
+      const s = db.services.find(x => x.id === id);
+      const copy = { ...clone(s), id: uid('s'), name: s.name + ' (копия)' };
+      db.services.splice(db.services.indexOf(s) + 1, 0, copy); save(); render(); editService(copy.id); break;
+    }
+    case 'material': editMaterial(id); break;
+    case 'newMaterial': editMaterial(null); break;
+    case 'cost': editCost(id); break;
+    case 'newCost': editCost(null); break;
+    case 'visitAdd': case 'visitInc': visit[id] = (visit[id] || 0) + 1; saveVisit(); render(); break;
+    case 'visitDec': visit[id] = Math.max(0, (visit[id] || 0) - 1); if (!visit[id]) delete visit[id]; saveVisit(); render(); break;
+    case 'clearVisit': visit = {}; saveVisit(); render(); break;
+  }
+  if (t.dataset.act?.startsWith('visit')) e.stopPropagation();
+});
+
+document.addEventListener('change', e => {
+  if (e.target.id === 'hours') {
+    const h = num(e.target.value);
+    if (h <= 0) { toast('Часов должно быть больше 0'); e.target.value = db.settings.hours; return; }
+    db.settings.hours = h; save(); render();
+  }
+});
+
+$('#settingsBtn').onclick = editSettings;
+render();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
