@@ -231,9 +231,9 @@ function defaults() {
   const costs = [
     ['Аренда', 200], ['Ток', 80], ['Вода', 3], ['Телефон', 13], ['Интернет', 5], ['Осигуровки', 300],
     ['Парковка', 80], ['Стирка', 100], ['Патент', 35], ['Реклама', 100]
-  ].map(([name, monthly], i) => ({ id: 'c' + i, name, monthly }));
+  ].map(([name, monthly], i) => ({ id: 'c' + i, name, monthly, inPause: name !== 'Стирка' }));
   return {
-    settings: { hours: 100, income: 1100, reserve: 15, pauseShare: 100, matReserve: 0, roundTo: 1, currency: '€' },
+    settings: { hours: 100, income: 1100, reserve: 15, matReserve: 0, roundTo: 1, currency: '€' },
     costs, items, kits, services
   };
 }
@@ -244,6 +244,8 @@ let db;
 try { db = JSON.parse(localStorage.getItem(KEY)); } catch { db = null; }
 if (!db || !Array.isArray(db.services) || !Array.isArray(db.items)) db = defaults();
 db.settings = { ...defaults().settings, ...db.settings };
+fixCosts();
+function fixCosts() { db.costs.forEach(c => { if (c.inPause === undefined) c.inPause = c.name.trim() !== 'Стирка'; }); }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { toast('Не удалось сохранить'); } }
 
 let tab = 'services', query = '';
@@ -294,24 +296,28 @@ function sumLines(lines) {
 }
 const kitCost = k => sumLines(k.lines);
 const expensesMonthly = () => db.costs.reduce((s, c) => s + num(c.monthly), 0);
+// Per hour of the cabinet: all expenses during a procedure, only those marked
+// "inPause" during the pause after it; your income runs in both.
 const perHour = () => {
   const st = db.settings, h = st.hours > 0 ? st.hours : 1;
-  return { exp: expensesMonthly() / h, income: num(st.income) / h };
+  const pauseExp = db.costs.filter(c => c.inPause !== false).reduce((s, c) => s + num(c.monthly), 0);
+  return { exp: expensesMonthly() / h, pauseExp: pauseExp / h, income: num(st.income) / h };
 };
 const roundUp = v => { const r = db.settings.roundTo; return r > 0 ? Math.ceil(v / r - 1e-9) * r : v; };
 
 function calc(s) {
   const st = db.settings, ph = perHour();
-  const minutes = num(s.duration) + num(s.pause) * st.pauseShare / 100;
-  const h = minutes / 60;
+  const procH = num(s.duration) / 60, pauseH = num(s.pause) / 60, minutes = num(s.duration) + num(s.pause);
   const m = sumLines(s.lines);
   const materials = m.cost * (1 + st.matReserve / 100);
-  const expenses = ph.exp * h, income = ph.income * h;
+  const procExp = ph.exp * procH, pauseExp = ph.pauseExp * pauseH;
+  const procInc = ph.income * procH, pauseInc = ph.income * pauseH;
+  const expenses = procExp + pauseExp, income = procInc + pauseInc;
   const min = expenses + materials, zero = min + income;
   const rec = roundUp(zero * (1 + st.reserve / 100));
   const my = s.myPrice != null && s.myPrice !== '' ? num(s.myPrice) : null;
   const zone = p => p < min - 0.005 ? 'r' : p < zero - 0.005 ? 'y' : 'g';
-  return { minutes, materials, rawMaterials: m.cost, missing: m.missing, expenses, income, min, zero, rec, my, zone: my != null ? zone(my) : null };
+  return { minutes, procExp, pauseExp, procInc, pauseInc, materials, rawMaterials: m.cost, missing: m.missing, expenses, income, min, zero, rec, my, zone: my != null ? zone(my) : null };
 }
 
 /* ---------- Views ---------- */
@@ -320,7 +326,7 @@ const SUBS = {
   services: () => 'Рекомендуемая цена · нажмите для расчёта',
   items: () => 'Цены берутся из последней закупки',
   kits: () => 'Наборы мелочей на одну процедуру',
-  numbers: () => `Час работы: ${money(perHour().exp + perHour().income)} (расходы ${money(perHour().exp)} + ваш доход ${money(perHour().income)})`
+  numbers: () => { const ph = perHour(); return `Час процедуры: ${money(ph.exp + ph.income)} · час паузы: ${money(ph.pauseExp + ph.income)}`; }
 };
 
 function render() {
@@ -398,16 +404,20 @@ function viewNumbers() {
   <div class="group">Расходы кабинета в месяц</div>
   <div class="summary">
     <div class="tile"><div class="k">Всего в месяц</div><div class="v">${money(exp)}</div></div>
-    <div class="tile accent"><div class="k">На 1 час</div><div class="v">${money(perHour().exp)}</div></div>
+    <div class="tile"><div class="k">Час процедуры</div><div class="v">${money(perHour().exp)}</div></div>
   </div>
+  <div class="summary">
+    <div class="tile"><div class="k">Ваш доход в час</div><div class="v">${money(perHour().income)}</div></div>
+    <div class="tile"><div class="k">Час паузы</div><div class="v">${money(perHour().pauseExp)}</div></div>
+  </div>
+  <div class="hint" style="margin:-4px 0 10px">В паузе вы на работе: ваш доход идёт полностью, а из расходов — только отмеченные «и в паузе». Нажмите на статью, чтобы поменять.</div>
   <div class="list">${db.costs.map(c => `<button class="card" data-act="cost" data-id="${c.id}">
-    <div class="main"><div class="name">${esc(c.name)}</div></div>
+    <div class="main"><div class="name">${esc(c.name)}</div><div class="meta">${c.inPause !== false ? '✓ и в паузе' : 'только процедура'}</div></div>
     <div class="price">${money(num(c.monthly))}</div></button>`).join('')}</div>
   <div class="bottom-actions"><button class="btn block" data-act="newCost">＋ Статья расхода</button></div>
 
   <div class="group">Расчёт</div>
   <div class="row2">
-    <div class="field"><label for="n_pause">Учитывать паузу, %</label><input id="n_pause" data-set="pauseShare" type="text" inputmode="decimal" value="${q(st.pauseShare)}"></div>
     <div class="field"><label for="n_round">Округлять цену до</label><select id="n_round" data-set="roundTo">
       ${[[0, 'не округлять'], [0.5, '0,50'], [1, '1'], [5, '5']].map(([v, t]) => `<option value="${v}" ${v === st.roundTo ? 'selected' : ''}>${t}</option>`).join('')}
     </select></div>
@@ -512,7 +522,7 @@ function linesEditor(box, lines, { allowKits }) {
 function showService(id) {
   const s = db.services.find(x => x.id === id); if (!s) return;
   const c = calc(s), st = db.settings, ph = perHour();
-  const h = c.minutes / 60;
+  const pH = num(s.duration) / 60, zH = num(s.pause) / 60, hh = v => q(+v.toFixed(3));
   const mat = s.lines.map(l => { const lc = lineCost(l); return `<tr><td>${l.type === 'kit' ? '🧺 ' : ''}${esc(lc.label)}<div class="m">${l.perPack ? `1/${q(l.perPack)} упаковки` : q(num(l.qty)) + ' ' + esc(l.type === 'kit' ? 'шт' : itemById(l.ref)?.unit || '')}${lc.missing.length ? ' · нет цены: ' + lc.missing.map(esc).join(', ') : ''}</div></td><td>${money(lc.cost)}</td></tr>`; }).join('');
   openSheet(`${head(esc(s.name))}
     <div class="tiers">
@@ -523,12 +533,12 @@ function showService(id) {
     ${c.my != null ? `<div class="note"><span class="dot ${c.zone}"></span>Ваша цена <b>${moneyR(c.my)}</b> — ${c.zone === 'r' ? 'ниже минимума: работаете в убыток' : c.zone === 'y' ? 'покрывает расходы, но вы недополучаете доход' : `покрывает расходы и ваш доход${c.my >= c.rec ? ' с запасом' : ''}`}.</div>` : ''}
     ${c.missing.length ? `<div class="note">⚠︎ Нет цены: ${c.missing.map(esc).join(', ')}. Материалы посчитаны без них.</div>` : ''}
     <table class="br">
-      <tr><td>Время: ${num(s.duration)} мин + пауза ${num(s.pause)} мин${st.pauseShare !== 100 ? ` × ${q(st.pauseShare)}%` : ''}<div class="m">${mins(c.minutes)}</div></td><td></td></tr>
       ${mat || '<tr><td class="m">Материалов нет</td><td></td></tr>'}
       ${st.matReserve ? `<tr><td>Запас на материалы ${q(st.matReserve)}%</td><td>${money(c.materials - c.rawMaterials)}</td></tr>` : ''}
-      <tr><td>Расходы кабинета<div class="m">${money(ph.exp)}/ч × ${q(+h.toFixed(3))} ч</div></td><td>${money(c.expenses)}</td></tr>
+      <tr><td>Расходы: процедура ${num(s.duration)} мин<div class="m">${money(ph.exp)}/ч × ${hh(pH)} ч</div></td><td>${money(c.procExp)}</td></tr>
+      ${num(s.pause) ? `<tr><td>Расходы: пауза ${num(s.pause)} мин<div class="m">${money(ph.pauseExp)}/ч × ${hh(zH)} ч · без «${db.costs.filter(x => x.inPause === false).map(x => esc(x.name)).join(', ') || '—'}»</div></td><td>${money(c.pauseExp)}</td></tr>` : ''}
       <tr class="total"><td>Минимум</td><td>${money(c.min)}</td></tr>
-      <tr><td>Ваш доход<div class="m">${money(ph.income)}/ч × ${q(+h.toFixed(3))} ч</div></td><td>${money(c.income)}</td></tr>
+      <tr><td>Ваш доход: ${mins(c.minutes)}<div class="m">${money(ph.income)}/ч × ${hh(pH + zH)} ч (процедура + пауза)</div></td><td>${money(c.income)}</td></tr>
       <tr class="total"><td>В ноль</td><td>${money(c.zero)}</td></tr>
       <tr><td>Запас ${q(st.reserve)}%${st.roundTo ? ', округление' : ''}</td><td>${money(c.rec - c.zero)}</td></tr>
       <tr class="total"><td>Рекомендуемая</td><td>${moneyR(c.rec)}</td></tr>
@@ -698,10 +708,12 @@ function calcUses(s, itemId) {
 
 function editCost(id) {
   const orig = db.costs.find(x => x.id === id);
-  const c = orig ? clone(orig) : { id: uid('c'), name: '', monthly: 0 };
+  const c = orig ? clone(orig) : { id: uid('c'), name: '', monthly: 0, inPause: true };
   openSheet(`${head(orig ? 'Статья расхода' : 'Новая статья')}
     <div class="field"><label>Название</label><input id="f_name" value="${esc(c.name)}"></div>
     <div class="field"><label>Сумма в месяц, ${esc(cur())}</label><input id="f_sum" type="text" inputmode="decimal" value="${q(num(c.monthly))}"></div>
+    <label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 6px;cursor:pointer"><input type="checkbox" id="f_pause" ${c.inPause !== false ? 'checked' : ''} style="width:22px;height:22px;margin:0;flex:none">
+      <span>Идёт и во время паузы<div class="sub">Аренда, свет, отопление, парковка — да. Стирка — нет: она зависит от клиентов, а не от времени.</div></span></label>
     <div class="actions">${orig ? `<button class="btn danger" id="del">Удалить</button>` : ''}<span class="spacer"></span>
       <button class="btn" data-act="close">Отмена</button><button class="btn primary" id="ok">Сохранить</button></div>`,
   body => {
@@ -709,6 +721,7 @@ function editCost(id) {
       c.name = body.querySelector('#f_name').value.trim();
       if (!c.name) return toast('Введите название');
       c.monthly = num(body.querySelector('#f_sum').value);
+      c.inPause = body.querySelector('#f_pause').checked;
       if (orig) Object.assign(orig, c); else db.costs.push(c);
       save(); render(); closeSheet();
     };
@@ -794,7 +807,7 @@ document.addEventListener('change', async e => {
     try {
       const data = JSON.parse(await e.target.files[0].text());
       if (!Array.isArray(data.services) || !Array.isArray(data.items) || !Array.isArray(data.kits)) throw 0;
-      db = data; db.settings = { ...defaults().settings, ...db.settings };
+      db = data; db.settings = { ...defaults().settings, ...db.settings }; fixCosts();
       save(); render(); toast('Данные загружены');
     } catch { toast('Файл не подходит'); }
   }

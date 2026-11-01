@@ -1,4 +1,4 @@
-const SHELL = 'kosmetolog-shell-v2';
+const SHELL = 'kosmetolog-shell-v3';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
