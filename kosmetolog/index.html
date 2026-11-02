@@ -178,6 +178,8 @@ const KEY = 'kosmetolog-v2';
 const CATS = ['Расходники', 'Косметика', 'Кола маска', 'Прочее'];
 
 /* ---------- Default data (from the Notion workspace) ---------- */
+// Services that need laundry (towels, sheets) by default.
+const LAUNDRY = ['Массаж тела полный', 'Массаж тела частичный', 'Чистка лица', 'Массаж антицеллюлитный 1 час', 'Массаж антицеллюлитный 1/2', 'Антиоксидантна изсветляваща терапия', 'Интензивна хидратираща терапия'];
 function defaults() {
   const P = (price, qty) => [{ id: 'p0', date: '', price, qty, supplier: 'из Notion' }];
   const items = [
@@ -231,7 +233,9 @@ function defaults() {
   const costs = [
     ['Аренда', 200], ['Ток', 80], ['Вода', 3], ['Телефон', 13], ['Интернет', 5], ['Осигуровки', 300],
     ['Парковка', 80], ['Стирка', 100], ['Патент', 35], ['Реклама', 100]
-  ].map(([name, monthly], i) => ({ id: 'c' + i, name, monthly, inPause: name !== 'Стирка' }));
+  ].map(([name, monthly], i) => name === 'Стирка'
+    ? { id: 'c' + i, name, monthly, mode: 'proc', count: 50, services: LAUNDRY.map(n => services.find(x => x.name === n).id) }
+    : { id: 'c' + i, name, monthly, mode: 'time', inPause: true });
   return {
     settings: { hours: 100, income: 1100, reserve: 15, matReserve: 0, roundTo: 1, currency: '€' },
     costs, items, kits, services
@@ -245,7 +249,13 @@ try { db = JSON.parse(localStorage.getItem(KEY)); } catch { db = null; }
 if (!db || !Array.isArray(db.services) || !Array.isArray(db.items)) db = defaults();
 db.settings = { ...defaults().settings, ...db.settings };
 fixCosts();
-function fixCosts() { db.costs.forEach(c => { if (c.inPause === undefined) c.inPause = c.name.trim() !== 'Стирка'; }); }
+function fixCosts() {
+  db.costs.forEach(c => {
+    if (c.mode) return;
+    if (c.name.trim() === 'Стирка') Object.assign(c, { mode: 'proc', count: 50, services: db.services.filter(x => LAUNDRY.includes(x.name.trim())).map(x => x.id) });
+    else { c.mode = 'time'; if (c.inPause === undefined) c.inPause = true; }
+  });
+}
 function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { toast('Не удалось сохранить'); } }
 
 let tab = 'services', query = '';
@@ -298,10 +308,17 @@ const kitCost = k => sumLines(k.lines);
 const expensesMonthly = () => db.costs.reduce((s, c) => s + num(c.monthly), 0);
 // Per hour of the cabinet: all expenses during a procedure, only those marked
 // "inPause" during the pause after it; your income runs in both.
+// Expenses with mode 'proc' (laundry) are not per hour: monthly sum ÷ procedures
+// per month, charged only to the services ticked for them.
+const timeCosts = () => db.costs.filter(c => c.mode !== 'proc');
+const procCosts = () => db.costs.filter(c => c.mode === 'proc');
+const perProcCost = c => num(c.count) > 0 ? num(c.monthly) / num(c.count) : 0;
 const perHour = () => {
   const st = db.settings, h = st.hours > 0 ? st.hours : 1;
-  const pauseExp = db.costs.filter(c => c.inPause !== false).reduce((s, c) => s + num(c.monthly), 0);
-  return { exp: expensesMonthly() / h, pauseExp: pauseExp / h, income: num(st.income) / h };
+  const tc = timeCosts();
+  const all = tc.reduce((s, c) => s + num(c.monthly), 0);
+  const pauseExp = tc.filter(c => c.inPause !== false).reduce((s, c) => s + num(c.monthly), 0);
+  return { exp: all / h, pauseExp: pauseExp / h, income: num(st.income) / h };
 };
 const roundUp = v => { const r = db.settings.roundTo; return r > 0 ? Math.ceil(v / r - 1e-9) * r : v; };
 
@@ -312,12 +329,14 @@ function calc(s) {
   const materials = m.cost * (1 + st.matReserve / 100);
   const procExp = ph.exp * procH, pauseExp = ph.pauseExp * pauseH;
   const procInc = ph.income * procH, pauseInc = ph.income * pauseH;
-  const expenses = procExp + pauseExp, income = procInc + pauseInc;
+  const perProc = procCosts().filter(c => (c.services || []).includes(s.id)).map(c => ({ c, cost: perProcCost(c) }));
+  const perProcSum = perProc.reduce((a, x) => a + x.cost, 0);
+  const expenses = procExp + pauseExp + perProcSum, income = procInc + pauseInc;
   const min = expenses + materials, zero = min + income;
   const rec = roundUp(zero * (1 + st.reserve / 100));
   const my = s.myPrice != null && s.myPrice !== '' ? num(s.myPrice) : null;
   const zone = p => p < min - 0.005 ? 'r' : p < zero - 0.005 ? 'y' : 'g';
-  return { minutes, procExp, pauseExp, procInc, pauseInc, materials, rawMaterials: m.cost, missing: m.missing, expenses, income, min, zero, rec, my, zone: my != null ? zone(my) : null };
+  return { minutes, perProc, procExp, pauseExp, procInc, pauseInc, materials, rawMaterials: m.cost, missing: m.missing, expenses, income, min, zero, rec, my, zone: my != null ? zone(my) : null };
 }
 
 /* ---------- Views ---------- */
@@ -410,9 +429,9 @@ function viewNumbers() {
     <div class="tile"><div class="k">Ваш доход в час</div><div class="v">${money(perHour().income)}</div></div>
     <div class="tile"><div class="k">Час паузы</div><div class="v">${money(perHour().pauseExp)}</div></div>
   </div>
-  <div class="hint" style="margin:-4px 0 10px">В паузе вы на работе: ваш доход идёт полностью, а из расходов — только отмеченные «и в паузе». Нажмите на статью, чтобы поменять.</div>
+  <div class="hint" style="margin:-4px 0 10px">В паузе вы на работе: ваш доход идёт полностью, а из расходов — только отмеченные «и в паузе». Стирка считается не по времени, а на процедуру — только для отмеченных услуг. Нажмите на статью, чтобы поменять.</div>
   <div class="list">${db.costs.map(c => `<button class="card" data-act="cost" data-id="${c.id}">
-    <div class="main"><div class="name">${esc(c.name)}</div><div class="meta">${c.inPause !== false ? '✓ и в паузе' : 'только процедура'}</div></div>
+    <div class="main"><div class="name">${esc(c.name)}</div><div class="meta">${c.mode === 'proc' ? `${money(perProcCost(c))} на процедуру · ${(c.services || []).filter(id => db.services.some(x => x.id === id)).length} усл.` : c.inPause !== false ? '✓ в час, и в паузе' : 'в час, без паузы'}</div></div>
     <div class="price">${money(num(c.monthly))}</div></button>`).join('')}</div>
   <div class="bottom-actions"><button class="btn block" data-act="newCost">＋ Статья расхода</button></div>
 
@@ -536,7 +555,8 @@ function showService(id) {
       ${mat || '<tr><td class="m">Материалов нет</td><td></td></tr>'}
       ${st.matReserve ? `<tr><td>Запас на материалы ${q(st.matReserve)}%</td><td>${money(c.materials - c.rawMaterials)}</td></tr>` : ''}
       <tr><td>Расходы: процедура ${num(s.duration)} мин<div class="m">${money(ph.exp)}/ч × ${hh(pH)} ч</div></td><td>${money(c.procExp)}</td></tr>
-      ${num(s.pause) ? `<tr><td>Расходы: пауза ${num(s.pause)} мин<div class="m">${money(ph.pauseExp)}/ч × ${hh(zH)} ч · без «${db.costs.filter(x => x.inPause === false).map(x => esc(x.name)).join(', ') || '—'}»</div></td><td>${money(c.pauseExp)}</td></tr>` : ''}
+      ${num(s.pause) ? `<tr><td>Расходы: пауза ${num(s.pause)} мин<div class="m">${money(ph.pauseExp)}/ч × ${hh(zH)} ч ${timeCosts().some(x => x.inPause === false) ? ` · без «${timeCosts().filter(x => x.inPause === false).map(x => esc(x.name)).join(', ')}»` : ''}</div></td><td>${money(c.pauseExp)}</td></tr>` : ''}
+      ${c.perProc.map(x => `<tr><td>${esc(x.c.name)}<div class="m">${money(num(x.c.monthly))} ÷ ${q(num(x.c.count))} процедур в месяц</div></td><td>${money(x.cost)}</td></tr>`).join('')}
       <tr class="total"><td>Минимум</td><td>${money(c.min)}</td></tr>
       <tr><td>Ваш доход: ${mins(c.minutes)}<div class="m">${money(ph.income)}/ч × ${hh(pH + zH)} ч (процедура + пауза)</div></td><td>${money(c.income)}</td></tr>
       <tr class="total"><td>В ноль</td><td>${money(c.zero)}</td></tr>
@@ -556,6 +576,7 @@ function editService(id) {
       <div class="field"><label>Пауза после, мин</label><input id="f_pause" type="text" inputmode="numeric" value="${s.pause}"></div>
     </div>
     <div class="field"><label>Цена в вашем прайсе (если есть)</label><input id="f_my" type="text" inputmode="decimal" value="${s.myPrice ?? ''}" placeholder="Покажет, в какую зону попадает"></div>
+    ${procCosts().length ? `<h3>Расходы на процедуру</h3>${procCosts().map(pc => `<label style="display:flex;gap:10px;align-items:center;margin:6px 0;cursor:pointer"><input type="checkbox" data-pc="${pc.id}" ${(pc.services || []).includes(s.id) ? 'checked' : ''} style="width:22px;height:22px;margin:0;flex:none"><span>${esc(pc.name)} <span class="sub">· ${money(perProcCost(pc))}</span></span></label>`).join('')}` : ''}
     <h3>Материалы на одну процедуру</h3>
     <div class="hint" style="margin:-4px 0 10px">Добавьте пакет и отдельно косметику. Для косметики можно указать «мл на процедуру» или «процедур из упаковки».</div>
     <div id="lines"></div>
@@ -571,6 +592,11 @@ function editService(id) {
       const my = body.querySelector('#f_my').value.trim();
       s.myPrice = my === '' ? null : num(my);
       if (orig) Object.assign(orig, s); else db.services.push(s);
+      body.querySelectorAll('[data-pc]').forEach(x => {
+        const pc = db.costs.find(c => c.id === x.dataset.pc); if (!pc) return;
+        pc.services = (pc.services || []).filter(v => v !== s.id);
+        if (x.checked) pc.services.push(s.id);
+      });
       save(); render(); showService(s.id);
     };
     body.querySelector('#del')?.addEventListener('click', () => {
@@ -708,20 +734,45 @@ function calcUses(s, itemId) {
 
 function editCost(id) {
   const orig = db.costs.find(x => x.id === id);
-  const c = orig ? clone(orig) : { id: uid('c'), name: '', monthly: 0, inPause: true };
+  const c = orig ? clone(orig) : { id: uid('c'), name: '', monthly: 0, mode: 'time', inPause: true };
+  c.services = c.services || []; c.count = c.count || 50;
+  const chk = (idA, on, text, sub) => `<label style="display:flex;gap:10px;align-items:flex-start;margin:6px 0;cursor:pointer"><input type="checkbox" ${idA} ${on ? 'checked' : ''} style="width:22px;height:22px;margin:0;flex:none"><span>${text}${sub ? `<div class="sub">${sub}</div>` : ''}</span></label>`;
   openSheet(`${head(orig ? 'Статья расхода' : 'Новая статья')}
     <div class="field"><label>Название</label><input id="f_name" value="${esc(c.name)}"></div>
     <div class="field"><label>Сумма в месяц, ${esc(cur())}</label><input id="f_sum" type="text" inputmode="decimal" value="${q(num(c.monthly))}"></div>
-    <label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 6px;cursor:pointer"><input type="checkbox" id="f_pause" ${c.inPause !== false ? 'checked' : ''} style="width:22px;height:22px;margin:0;flex:none">
-      <span>Идёт и во время паузы<div class="sub">Аренда, свет, отопление, парковка — да. Стирка — нет: она зависит от клиентов, а не от времени.</div></span></label>
+    <div class="field"><label>Как считать</label><select id="f_mode">
+      <option value="time" ${c.mode !== 'proc' ? 'selected' : ''}>В час</option>
+      <option value="proc" ${c.mode === 'proc' ? 'selected' : ''}>На процедуру</option>
+    </select></div>
+    <div id="m_time">${chk('id="f_pause"', c.inPause !== false, 'Идёт и во время паузы', 'Аренда, свет, отопление, парковка — да.')}</div>
+    <div id="m_proc">
+      <div class="field"><label>Сколько таких процедур в месяц</label><input id="f_count" type="text" inputmode="decimal" value="${q(num(c.count))}"></div>
+      <div class="calc-line" id="f_per"></div>
+      <div class="sub" style="margin-bottom:4px">Для каких услуг:</div>
+      ${db.services.map(x => chk(`data-svc="${x.id}"`, c.services.includes(x.id), esc(x.name))).join('')}
+    </div>
     <div class="actions">${orig ? `<button class="btn danger" id="del">Удалить</button>` : ''}<span class="spacer"></span>
       <button class="btn" data-act="close">Отмена</button><button class="btn primary" id="ok">Сохранить</button></div>`,
   body => {
+    const mode = body.querySelector('#f_mode'), sum = body.querySelector('#f_sum'), cnt = body.querySelector('#f_count'), per = body.querySelector('#f_per');
+    const upd = () => {
+      body.querySelector('#m_time').hidden = mode.value === 'proc';
+      body.querySelector('#m_proc').hidden = mode.value !== 'proc';
+      const n = num(cnt.value);
+      per.innerHTML = n > 0 ? `На одну процедуру: <b>${money(num(sum.value) / n)}</b>` : 'Укажите число процедур';
+    };
+    mode.onchange = sum.oninput = cnt.oninput = upd; upd();
     body.querySelector('#ok').onclick = () => {
       c.name = body.querySelector('#f_name').value.trim();
       if (!c.name) return toast('Введите название');
-      c.monthly = num(body.querySelector('#f_sum').value);
+      c.monthly = num(sum.value);
+      c.mode = mode.value;
       c.inPause = body.querySelector('#f_pause').checked;
+      if (c.mode === 'proc') {
+        c.count = num(cnt.value);
+        if (!(c.count > 0)) return toast('Сколько процедур в месяц?');
+        c.services = [...body.querySelectorAll('[data-svc]')].filter(x => x.checked).map(x => x.dataset.svc);
+      }
       if (orig) Object.assign(orig, c); else db.costs.push(c);
       save(); render(); closeSheet();
     };
@@ -752,7 +803,9 @@ document.addEventListener('click', e => {
     case 'dupService': {
       const s = db.services.find(x => x.id === id);
       const copy = { ...clone(s), id: uid('s'), name: s.name + ' (копия)' };
-      db.services.splice(db.services.indexOf(s) + 1, 0, copy); save(); render(); editService(copy.id); break;
+      db.services.splice(db.services.indexOf(s) + 1, 0, copy);
+      procCosts().forEach(pc => { if ((pc.services || []).includes(s.id)) pc.services.push(copy.id); });
+      save(); render(); editService(copy.id); break;
     }
     case 'kit': editKit(id); break;
     case 'newKit': editKit(null); break;
