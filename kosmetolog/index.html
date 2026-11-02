@@ -137,6 +137,15 @@ table.br .m { color: var(--muted); font-size: .82rem; }
 .line input, .line select { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
 .line .c { font-size: .8rem; color: var(--muted); margin-top: 4px; }
 
+.coef { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; }
+.coef-h { font-weight: 600; margin-bottom: 8px; }
+.chips { display: flex; gap: 6px; align-items: center; }
+.chips button { flex: 1; border: 1px solid var(--line); background: var(--card); border-radius: 99px; padding: 7px 0; cursor: pointer; min-width: 0; }
+.chips button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.chips input { width: 58px; flex: none; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); text-align: center; }
+.item-coef { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.item-coef span { flex: 1; min-width: 0; }
+.item-coef input { width: 64px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); text-align: center; }
 .pc-toggle { display: flex; gap: 10px; align-items: center; background: var(--bg); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; cursor: pointer; font-weight: 600; }
 .pc-toggle input { width: 22px; height: 22px; margin: 0; flex: none; accent-color: var(--accent); }
 .hist { display: grid; gap: 6px; }
@@ -180,8 +189,10 @@ const KEY = 'kosmetolog-v2';
 const CATS = ['Расходники', 'Косметика', 'Кола маска', 'Прочее'];
 
 /* ---------- Default data (from the Notion workspace) ---------- */
-// Services that need laundry (towels, sheets) by default.
-const LAUNDRY = ['Массаж тела полный', 'Массаж тела частичный', 'Чистка лица', 'Массаж антицеллюлитный 1 час', 'Массаж антицеллюлитный 1/2', 'Антиоксидантна изсветляваща терапия', 'Интензивна хидратираща терапия'];
+// Laundry per procedure in units: a body massage = 1, a facial (one towel) = 0.3.
+const LAUNDRY = { 'Массаж тела полный': 1, 'Массаж тела частичный': 1, 'Массаж антицеллюлитный 1 час': 1, 'Массаж антицеллюлитный 1/2': 1,
+  'Чистка лица': 0.3, 'Антиоксидантна изсветляваща терапия': 0.3, 'Интензивна хидратираща терапия': 0.3 };
+const laundryCoef = list => Object.fromEntries(list.filter(x => LAUNDRY[x.name.trim()]).map(x => [x.id, LAUNDRY[x.name.trim()]]));
 function defaults() {
   const P = (price, qty) => [{ id: 'p0', date: '', price, qty, supplier: 'из Notion' }];
   const items = [
@@ -236,7 +247,7 @@ function defaults() {
     ['Аренда', 200], ['Ток', 80], ['Вода', 3], ['Телефон', 13], ['Интернет', 5], ['Осигуровки', 300],
     ['Парковка', 80], ['Стирка', 100], ['Патент', 35], ['Реклама', 100]
   ].map(([name, monthly], i) => name === 'Стирка'
-    ? { id: 'c' + i, name, monthly, mode: 'proc', services: LAUNDRY.map(n => services.find(x => x.name === n).id) }
+    ? { id: 'c' + i, name, monthly, mode: 'proc', unitPrice: 2, coef: laundryCoef(services) }
     : { id: 'c' + i, name, monthly, mode: 'time', inPause: true });
   return {
     settings: { hours: 100, income: 1100, reserve: 15, matReserve: 0, roundTo: 1, currency: '€' },
@@ -253,9 +264,13 @@ db.settings = { ...defaults().settings, ...db.settings };
 fixCosts();
 function fixCosts() {
   db.costs.forEach(c => {
-    if (c.mode) return;
-    if (c.name.trim() === 'Стирка') Object.assign(c, { mode: 'proc', services: db.services.filter(x => LAUNDRY.includes(x.name.trim())).map(x => x.id) });
-    else { c.mode = 'time'; if (c.inPause === undefined) c.inPause = true; }
+    if (!c.mode && c.name.trim() === 'Стирка') c.mode = 'proc';
+    if (!c.mode) { c.mode = 'time'; if (c.inPause === undefined) c.inPause = true; }
+    if (c.mode === 'proc' && !c.coef) {
+      c.coef = laundryCoef(db.services);
+      if (c.unitPrice == null) c.unitPrice = 2;
+      delete c.services;
+    }
   });
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { toast('Не удалось сохранить'); } }
@@ -310,11 +325,11 @@ const kitCost = k => sumLines(k.lines);
 const expensesMonthly = () => db.costs.reduce((s, c) => s + num(c.monthly), 0);
 // Per hour of the cabinet: all expenses during a procedure, only those marked
 // "inPause" during the pause after it; your income runs in both.
-// Expenses with mode 'proc' (laundry) are per hour of procedure time too, but
-// charged only to the services where they are ticked (no pause, no other services).
+// Expenses with mode 'proc' (laundry) are not per hour: each procedure carries
+// its own coefficient (body massage 1, facial 0.3) × the price of one unit.
 const timeCosts = () => db.costs.filter(c => c.mode !== 'proc');
 const procCosts = () => db.costs.filter(c => c.mode === 'proc');
-const markedRate = c => num(c.monthly) / (db.settings.hours > 0 ? db.settings.hours : 1);
+const coefOf = (c, sid) => num(c.coef?.[sid]);
 const perHour = () => {
   const st = db.settings, h = st.hours > 0 ? st.hours : 1;
   const tc = timeCosts();
@@ -331,7 +346,7 @@ function calc(s) {
   const materials = m.cost * (1 + st.matReserve / 100);
   const procExp = ph.exp * procH, pauseExp = ph.pauseExp * pauseH;
   const procInc = ph.income * procH, pauseInc = ph.income * pauseH;
-  const perProc = procCosts().filter(c => (c.services || []).includes(s.id)).map(c => ({ c, cost: markedRate(c) * procH }));
+  const perProc = procCosts().filter(c => coefOf(c, s.id) > 0).map(c => ({ c, k: coefOf(c, s.id), cost: num(c.unitPrice) * coefOf(c, s.id) }));
   const perProcSum = perProc.reduce((a, x) => a + x.cost, 0);
   const expenses = procExp + pauseExp + perProcSum, income = procInc + pauseInc;
   const min = expenses + materials, zero = min + income;
@@ -433,7 +448,7 @@ function viewNumbers() {
   </div>
   <div class="hint" style="margin:-4px 0 10px">В паузе вы на работе: ваш доход идёт полностью, а из расходов — только отмеченные «и в паузе». Стирка считается не по времени, а на процедуру — только для отмеченных услуг. Нажмите на статью, чтобы поменять.</div>
   <div class="list">${db.costs.map(c => `<button class="card" data-act="cost" data-id="${c.id}">
-    <div class="main"><div class="name">${esc(c.name)}</div><div class="meta">${c.mode === 'proc' ? `${money(markedRate(c))} в час · только где отмечено в процедуре` : c.inPause !== false ? '✓ в час, и в паузе' : 'в час, без паузы'}</div></div>
+    <div class="main"><div class="name">${esc(c.name)}</div><div class="meta">${c.mode === 'proc' ? `${money(num(c.unitPrice))} за единицу · по коэффициенту в процедуре` : c.inPause !== false ? '✓ в час, и в паузе' : 'в час, без паузы'}</div></div>
     <div class="price">${money(num(c.monthly))}</div></button>`).join('')}</div>
   <div class="bottom-actions"><button class="btn block" data-act="newCost">＋ Статья расхода</button></div>
 
@@ -553,13 +568,13 @@ function showService(id) {
     </div>
     ${c.my != null ? `<div class="note"><span class="dot ${c.zone}"></span>Ваша цена <b>${moneyR(c.my)}</b> — ${c.zone === 'r' ? 'ниже минимума: работаете в убыток' : c.zone === 'y' ? 'покрывает расходы, но вы недополучаете доход' : `покрывает расходы и ваш доход${c.my >= c.rec ? ' с запасом' : ''}`}.</div>` : ''}
     ${c.missing.length ? `<div class="note">⚠︎ Нет цены: ${c.missing.map(esc).join(', ')}. Материалы посчитаны без них.</div>` : ''}
-    ${procCosts().map(pc => `<label class="pc-toggle"><input type="checkbox" data-quick-pc="${pc.id}" data-sid="${s.id}" ${(pc.services || []).includes(s.id) ? 'checked' : ''}><span>${esc(pc.name)} в этой процедуре</span></label>`).join('')}
+    ${procCosts().map(pc => coefBlock(pc, s.id, true)).join('')}
     <table class="br">
       ${mat || '<tr><td class="m">Материалов нет</td><td></td></tr>'}
       ${st.matReserve ? `<tr><td>Запас на материалы ${q(st.matReserve)}%</td><td>${money(c.materials - c.rawMaterials)}</td></tr>` : ''}
       <tr><td>Расходы: процедура ${num(s.duration)} мин<div class="m">${money(ph.exp)}/ч × ${hh(pH)} ч</div></td><td>${money(c.procExp)}</td></tr>
       ${num(s.pause) ? `<tr><td>Расходы: пауза ${num(s.pause)} мин<div class="m">${money(ph.pauseExp)}/ч × ${hh(zH)} ч ${timeCosts().some(x => x.inPause === false) ? ` · без «${timeCosts().filter(x => x.inPause === false).map(x => esc(x.name)).join(', ')}»` : ''}</div></td><td>${money(c.pauseExp)}</td></tr>` : ''}
-      ${c.perProc.map(x => `<tr><td>${esc(x.c.name)}<div class="m">${money(markedRate(x.c))}/ч × ${hh(pH)} ч процедуры</div></td><td>${money(x.cost)}</td></tr>`).join('')}
+      ${c.perProc.map(x => `<tr><td>${esc(x.c.name)}<div class="m">${q(x.k)} × ${money(num(x.c.unitPrice))} за единицу</div></td><td>${money(x.cost)}</td></tr>`).join('')}
       <tr class="total"><td>Минимум</td><td>${money(c.min)}</td></tr>
       <tr><td>Ваш доход: ${mins(c.minutes)}<div class="m">${money(ph.income)}/ч × ${hh(pH + zH)} ч (процедура + пауза)</div></td><td>${money(c.income)}</td></tr>
       <tr class="total"><td>В ноль</td><td>${money(c.zero)}</td></tr>
@@ -582,7 +597,7 @@ function editService(id) {
     <h3>Материалы на одну процедуру</h3>
     <div class="hint" style="margin:-4px 0 10px">Добавьте пакет и отдельно косметику. Для косметики можно указать «мл на процедуру» или «процедур из упаковки».</div>
     <div id="lines"></div>
-    ${procCosts().map(pc => `<label class="pc-toggle" style="margin-top:10px"><input type="checkbox" data-pc="${pc.id}" ${(pc.services || []).includes(s.id) ? 'checked' : ''}><span>${esc(pc.name)} в этой процедуре</span></label>`).join('')}
+    <div style="margin-top:10px">${procCosts().map(pc => coefBlock(pc, s.id, false)).join('')}</div>
     <div class="actions">${orig ? `<button class="btn danger" id="del">Удалить</button>` : ''}<span class="spacer"></span>
       <button class="btn" data-act="close">Отмена</button><button class="btn primary" id="ok">Сохранить</button></div>`,
   body => {
@@ -595,10 +610,9 @@ function editService(id) {
       const my = body.querySelector('#f_my').value.trim();
       s.myPrice = my === '' ? null : num(my);
       if (orig) Object.assign(orig, s); else db.services.push(s);
-      body.querySelectorAll('[data-pc]').forEach(x => {
+      body.querySelectorAll('.coef').forEach(x => {
         const pc = db.costs.find(c => c.id === x.dataset.pc); if (!pc) return;
-        pc.services = (pc.services || []).filter(v => v !== s.id);
-        if (x.checked) pc.services.push(s.id);
+        setCoef(pc, s.id, x.querySelector('input').value);
       });
       save(); render(); showService(s.id);
     };
@@ -735,35 +749,66 @@ function calcUses(s, itemId) {
   return s.lines.some(l => (l.type === 'item' && l.ref === itemId) || (l.type === 'kit' && kitById(l.ref)?.lines.some(x => x.ref === itemId)));
 }
 
+/* ---------- Per-procedure coefficient (laundry) ---------- */
+const COEF_CHIPS = [0, 0.3, 0.5, 1];
+function coefBlock(pc, sid, quick) {
+  const v = coefOf(pc, sid);
+  return `<div class="coef" data-pc="${pc.id}" data-sid="${sid}" data-quick="${quick ? 1 : ''}">
+    <div class="coef-h">${esc(pc.name)} в этой процедуре <span class="sub">· ${v ? money(num(pc.unitPrice) * v) : 'нет'}</span></div>
+    <div class="chips">${COEF_CHIPS.map(c => `<button type="button" data-coef="${c}" class="${Math.abs(c - v) < 1e-9 ? 'on' : ''}">${c ? q(c) : 'нет'}</button>`).join('')}
+      <input type="text" inputmode="decimal" value="${q(v)}" aria-label="Коэффициент"></div>
+  </div>`;
+}
+function setCoef(pc, sid, val) {
+  const v = Math.max(0, num(val));
+  pc.coef = pc.coef || {};
+  if (v) pc.coef[sid] = v; else delete pc.coef[sid];
+}
+function applyCoef(block, val) {
+  const pc = db.costs.find(c => c.id === block.dataset.pc), sid = block.dataset.sid;
+  if (!pc) return;
+  if (block.dataset.quick) { setCoef(pc, sid, val); save(); render(); showService(sid); return; }
+  const v = Math.max(0, num(val));
+  block.querySelector('input').value = q(v);
+  block.querySelectorAll('[data-coef]').forEach(b => b.classList.toggle('on', Math.abs(num(b.dataset.coef) - v) < 1e-9));
+  block.querySelector('.coef-h .sub').textContent = '· ' + (v ? money(num(pc.unitPrice) * v) : 'нет');
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.coef [data-coef]'); if (!b) return;
+  applyCoef(b.closest('.coef'), b.dataset.coef);
+});
+
 function editCost(id) {
   const orig = db.costs.find(x => x.id === id);
   const c = orig ? clone(orig) : { id: uid('c'), name: '', monthly: 0, mode: 'time', inPause: true };
-  c.services = c.services || [];
+  c.coef = c.coef || {}; if (c.unitPrice == null) c.unitPrice = 2;
   const chk = (idA, on, text, sub) => `<label style="display:flex;gap:10px;align-items:flex-start;margin:6px 0;cursor:pointer"><input type="checkbox" ${idA} ${on ? 'checked' : ''} style="width:22px;height:22px;margin:0;flex:none"><span>${text}${sub ? `<div class="sub">${sub}</div>` : ''}</span></label>`;
   openSheet(`${head(orig ? 'Статья расхода' : 'Новая статья')}
     <div class="field"><label>Название</label><input id="f_name" value="${esc(c.name)}"></div>
     <div class="field"><label>Сумма в месяц, ${esc(cur())}</label><input id="f_sum" type="text" inputmode="decimal" value="${q(num(c.monthly))}"></div>
     <div class="field"><label>Как считать</label><select id="f_mode">
       <option value="time" ${c.mode !== 'proc' ? 'selected' : ''}>Для всех процедур</option>
-      <option value="proc" ${c.mode === 'proc' ? 'selected' : ''}>Только где отмечено</option>
+      <option value="proc" ${c.mode === 'proc' ? 'selected' : ''}>По коэффициенту</option>
     </select></div>
     <div id="m_time">${chk('id="f_pause"', c.inPause !== false, 'Идёт и во время паузы', 'Аренда, свет, отопление, парковка — да.')}</div>
     <div id="m_proc">
+      <div class="field"><label>Цена одной единицы, ${esc(cur())}</label><input id="f_unit" type="text" inputmode="decimal" value="${q(num(c.unitPrice))}"></div>
+      <div class="hint">Единица — стирка после полного массажа тела. Чистка лица (одно полотенце) — 0,3 единицы.</div>
       <div class="calc-line" id="f_per"></div>
-      <div class="sub" style="margin-bottom:4px">Галочку можно ставить и прямо в процедуре. Отмечено:</div>
-      ${db.services.map(x => chk(`data-svc="${x.id}"`, c.services.includes(x.id), esc(x.name))).join('')}
+      <div class="sub" style="margin:10px 0 4px">Коэффициент по процедурам (0 — нет). Можно менять и прямо в процедуре.</div>
+      ${db.services.map(x => `<div class="item-coef"><span>${esc(x.name)}</span><input data-svc="${x.id}" type="text" inputmode="decimal" value="${q(coefOf(c, x.id))}"></div>`).join('')}
     </div>
     <div class="actions">${orig ? `<button class="btn danger" id="del">Удалить</button>` : ''}<span class="spacer"></span>
       <button class="btn" data-act="close">Отмена</button><button class="btn primary" id="ok">Сохранить</button></div>`,
   body => {
-    const mode = body.querySelector('#f_mode'), sum = body.querySelector('#f_sum'), per = body.querySelector('#f_per');
+    const mode = body.querySelector('#f_mode'), sum = body.querySelector('#f_sum'), per = body.querySelector('#f_per'), unit = body.querySelector('#f_unit');
     const upd = () => {
       body.querySelector('#m_time').hidden = mode.value === 'proc';
       body.querySelector('#m_proc').hidden = mode.value !== 'proc';
-      const h = db.settings.hours > 0 ? db.settings.hours : 1;
-      per.innerHTML = `${money(num(sum.value) / h)} в час процедуры — только там, где стоит галочка. Паузу не включает.`;
+      const u = num(unit.value), m = num(sum.value);
+      per.innerHTML = u > 0 && m > 0 ? `${money(m)} в месяц ÷ ${money(u)} ≈ <b>${nf0.format(Math.round(m / u))}</b> полных массажей в месяц. Если у вас их обычно больше — уменьшите цену единицы, меньше — увеличьте.` : 'Укажите цену единицы';
     };
-    mode.onchange = sum.oninput = upd; upd();
+    mode.onchange = sum.oninput = unit.oninput = upd; upd();
     body.querySelector('#ok').onclick = () => {
       c.name = body.querySelector('#f_name').value.trim();
       if (!c.name) return toast('Введите название');
@@ -771,7 +816,8 @@ function editCost(id) {
       c.mode = mode.value;
       c.inPause = body.querySelector('#f_pause').checked;
       if (c.mode === 'proc') {
-        c.services = [...body.querySelectorAll('[data-svc]')].filter(x => x.checked).map(x => x.dataset.svc);
+        c.unitPrice = num(unit.value);
+        body.querySelectorAll('[data-svc]').forEach(x => setCoef(c, x.dataset.svc, x.value));
       }
       if (orig) Object.assign(orig, c); else db.costs.push(c);
       save(); render(); closeSheet();
@@ -804,7 +850,7 @@ document.addEventListener('click', e => {
       const s = db.services.find(x => x.id === id);
       const copy = { ...clone(s), id: uid('s'), name: s.name + ' (копия)' };
       db.services.splice(db.services.indexOf(s) + 1, 0, copy);
-      procCosts().forEach(pc => { if ((pc.services || []).includes(s.id)) pc.services.push(copy.id); });
+      procCosts().forEach(pc => { if (coefOf(pc, s.id)) pc.coef[copy.id] = coefOf(pc, s.id); });
       save(); render(); editService(copy.id); break;
     }
     case 'kit': editKit(id); break;
@@ -846,13 +892,8 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('change', async e => {
-  if (e.target.dataset.quickPc) {
-    const pc = db.costs.find(c => c.id === e.target.dataset.quickPc), sid = e.target.dataset.sid;
-    if (!pc) return;
-    pc.services = (pc.services || []).filter(v => v !== sid);
-    if (e.target.checked) pc.services.push(sid);
-    save(); render(); showService(sid); return;
-  }
+  const cb = e.target.closest('.coef');
+  if (cb && e.target.tagName === 'INPUT') { applyCoef(cb, e.target.value); return; }
   const k = e.target.dataset.set;
   if (k) {
     if (k === 'currency') db.settings.currency = e.target.value.trim() || '€';
